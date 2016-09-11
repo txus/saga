@@ -82,7 +82,8 @@
 (defui Choices
   Object
   (render [this]
-          (let [{:keys [choices choose! chose]} (om/props this)]
+          (let [{:keys [choices]} (om/props this)
+                {:keys [choose!]} (om/get-computed this)]
             (dom/ul
              #js {:className "choices"}
              (map
@@ -103,15 +104,14 @@
          [:d/id :d/choices :d/chose :d/text :d/assumptions :d/consequences])
   Object
   (render [this]
-          (let [{:keys [d/choices d/text d/id last?
-                        d/chose
-                        choose!]} (om/props this)]
+          (let [{:keys [d/choices d/text d/id last? d/chose]} (om/props this)
+                {:keys [choose! last?]} (om/get-computed this)]
             (dom/div
              nil
              (dom/p nil text)
              (if last?
-               (choices-view {:choices choices
-                              :choose! choose!})
+               (choices-view (om/computed {:choices choices}
+                                          {:choose! choose!}))
                (dom/p nil (first (get choices chose))))))))
 
 (def passage-view (om/factory Passage))
@@ -134,9 +134,10 @@
              (concat
               (for [passage (butlast path)]
                 (passage-view passage))
-              [(passage-view (assoc current-passage
-                                   :last? true
-                                   :choose! choose!))])))))
+              [(passage-view (om/computed
+                              current-passage
+                              {:last? true
+                               :choose! choose!}))])))))
 
 (def reconciler
   (om/reconciler {:state init-data

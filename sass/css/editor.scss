@@ -1,0 +1,51 @@
+$font-stack:    PT Serif, Helvetica, sans-serif;
+$primary-color: #333;
+
+body {
+    font: 100% $font-stack;
+    color: $primary-color;
+}
+
+#container {
+    margin: 0px auto;
+    width: 100%;
+}
+
+#sidebar {
+    float: left;
+    width: 25%;
+    padding: 0;
+    border-right: 1px solid #DDD;
+    font-size: 13px;
+
+    ul {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+
+        li {
+            cursor: pointer;
+            padding: 15px;
+
+            &:hover {
+                background-color: #DDD;
+            }
+        }
+    }
+}
+
+#editing {
+    float:left;
+    padding: 15px;
+    width: 60%;
+
+
+    textarea {
+        border: 1px solid #DDD;
+        width: 100%;
+        font-size: 16px;
+        padding: 15px;
+    }
+
+
+}

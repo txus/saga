@@ -27,7 +27,9 @@
 (defmulti mutate om/dispatch)
 
 (def init-data
-  {:d/passages
+  {:editing
+   {:d/passage {:d/id :in-the-building}}
+   :d/passages
    [(-> (s/passage :in-the-building
                  "It was raining outside. The street was soaking wet.")
         (s/entails (s/indeed "went out to the street"))
@@ -76,61 +78,88 @@
         (s/assumes (s/indeed "old man disapproved me"))
         (s/entails (s/indeed "the end")))]})
 
-(defui Choices
-  Object
-  (render [this]
-          (let [{:keys [choices choose! chose]} (om/props this)]
-            (dom/ul
-             #js {:className "choices"}
-             (map
-              (fn [[k [d _]]]
-                (dom/li #js {:key k}
-                        (dom/button #js {:className "choice"
-                                         :onClick (fn [_] (choose! k))} d)))
-              choices)))))
-
-(def choices-view (om/factory Choices))
-
-(defui Passage
+(defui SidebarPassage
   static om/Ident
   (ident [this {:keys [d/id]}]
          [:passage/by-id id])
+
   static om/IQuery
   (query [this]
-         [:d/id :d/choices :d/chose :d/text :d/assumptions :d/consequences])
+         [:d/id])
+
   Object
   (render [this]
-          (let [{:keys [d/choices d/text d/id last?
-                        d/chose
-                        choose!]} (om/props this)]
-            (dom/div
-             nil
-             (dom/p nil text)
-             (if last?
-               (choices-view {:choices choices
-                              :choose! choose!})
-               (dom/p nil (first (get choices chose))))))))
+          (let [{:keys [d/id]} (om/props this)
+                {:keys [edit!]} (om/get-computed this)]
+            (dom/li #js {:onClick #(edit! id)} (str id)))))
 
-(def passage-view (om/factory Passage))
+(def sidebar-passage-view (om/factory SidebarPassage {:keyfn :d/id}))
+
+(defui SidebarPassages
+  Object
+  (render [this]
+          (let [{:keys [d/passages]} (om/props this)
+                computed (om/get-computed this)]
+            (apply dom/ul #js {:id "sidebar-passages"}
+                   (map (comp sidebar-passage-view
+                           #(om/computed % computed))
+                        passages)))))
+
+(def sidebar-passages-view (om/factory SidebarPassages))
+
+(defui EditingPassage
+  static om/Ident
+  (ident [this {:keys [d/id]}]
+         [:passage/by-id id])
+
+  static om/IQuery
+  (query [this]
+         [:d/id :d/text]))
+
+(defui Editing
+  static om/IQuery
+  (query [this]
+         (let [sub (om/get-query EditingPassage)]
+           `[{:d/passage ~sub}]))
+
+  Object
+  (render [this]
+          (let [{:keys [d/passage]} (om/props this)
+                {:keys [update-passage!]} (om/get-computed this)
+                {:keys [d/text d/id]} passage]
+            (dom/div nil
+                     (dom/textarea #js {:id "text"
+                                        :rows 10
+                                        :cols 10
+                                        :onChange (fn [e]
+                                                    (let [new-text (.. e -target -value)]
+                                                      (update-passage! id {:d/text new-text})))
+                                        :value text})))))
+
+(def editing-view (om/factory Editing))
 
 (defui Editor
   static om/IQuery
   (query [this]
-         (let [subquery (om/get-query Passage)]
-           `[{:d/path ~subquery}
-             {:d/passages ~subquery}]))
+         (let [subquery (om/get-query SidebarPassage)
+               editing-subquery (om/get-query Editing)]
+           `[{:d/passages ~subquery}
+             {:editing ~editing-subquery}]))
 
   Object
   (render [this]
-          (let [{:keys [d/path]} (om/props this)
-                current-passage (last path)]
-            (dom/div
-             nil
-             (concat
-              (for [passage (butlast path)]
-                (passage-view passage))
-              [(passage-view (assoc current-passage
-                                   :last? true))])))))
+          (let [{:keys [editing] :as props} (om/props this)
+                edit! (fn [id]
+                        (om/transact! this `[(editor/edit! {:id ~id})]))
+                update-passage! (fn [id props]
+                                  (om/transact! this `[(editor/update-passage {:id ~id :props ~props})]))]
+            (dom/div nil
+                     (dom/div #js {:id "sidebar"}
+                              (sidebar-passages-view (om/computed props
+                                                                  {:edit! edit!})))
+                     (dom/div #js {:id "editing"}
+                              (editing-view (om/computed editing
+                                                         {:update-passage! update-passage!})))))))
 
 (def reconciler
   (om/reconciler {:state init-data
@@ -142,17 +171,37 @@
                 Editor
                 (gdom/getElement "container")))
 
+(defmethod mutate 'editor/edit!
+  [{:keys [state]} _ {:keys [id]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (assoc-in st [:editing :d/passage]
+                        [:passage/by-id id]))))})
+
+(defmethod mutate 'editor/update-passage
+  [{:keys [state]} _ {:keys [id props]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (update-in st [:passage/by-id id]
+                         #(merge % props)))))})
+
 (comment
 
 
   (require '[cljs.pprint :as pp])
 
-  (def norm-data (om/tree->db App init-data true))
+  (def norm-data (om/tree->db Editor init-data true))
 
   (def parser (om/parser {:read read}))
 
-  (om/get-query App)
+  (om/get-query Editor)
 
+
+  norm-data
 
   (u/ident? (-> norm-data :d/current-passage))
 
