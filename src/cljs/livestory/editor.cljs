@@ -6,7 +6,8 @@
             [om.util :as u]
             devtools.core
             [om.dom :as dom]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.set :as set]))
 
 (devtools.core/install! [:custom-formatters :sanity-hints])
 
@@ -17,12 +18,36 @@
 
 (defmulti read om/dispatch)
 
+(defn- all-facts [st]
+  (->> (:d/passages st)
+       (map (fn [path]
+              (let [{:keys [d/assumptions d/consequences d/choices]} (get-in st path)]
+
+                (apply set/union
+                       (set assumptions)
+                       (set consequences)
+                       (map last (vals choices))))))
+       (apply set/union)))
+
+(defmethod read :all-facts
+  [{:keys [state query] :as env} k params]
+  (let [st @state]
+    {:value (all-facts st)}))
+
+(defmethod read :search/results
+  [{:keys [state ast] :as env} k {:keys [query]}]
+  (let [st @state]
+    (if (empty? query)
+      {:value #{}}
+      {:value (into #{} (filter (fn [{:keys [d/description]}]
+                                  (str/includes? (str/lower-case description)
+                                                 (str/lower-case query)))
+                                (all-facts st)))})))
+
 (defmethod read :default
   [{:keys [state query] :as env} k params]
   (let [st @state]
-    (if (u/ident? (k st))
-      {:value (get-in st (k st))}
-      {:value (om/db->tree query (k st) st)})))
+    {:value (om/db->tree query (get st k) st)}))
 
 (defmulti mutate om/dispatch)
 
@@ -78,6 +103,23 @@
         (s/assumes (s/indeed "old man disapproved me"))
         (s/entails (s/indeed "the end")))]})
 
+(defui SidebarFact
+  static om/Ident
+  (ident [this {:keys [d/id]}]
+         [:fact/by-id id])
+
+  static om/IQuery
+  (query [this]
+         [:d/id :d/negated? :d/description])
+
+  Object
+  (render [this]
+          (let [{:keys [d/id d/description d/negated?]} (om/props this)]
+            (dom/li nil
+                    (str description)))))
+
+(def sidebar-fact-view (om/factory SidebarFact {:keyfn (comp str (juxt :d/id :d/negated?))}))
+
 (defui SidebarPassage
   static om/Ident
   (ident [this {:keys [d/id]}]
@@ -100,12 +142,26 @@
   (render [this]
           (let [{:keys [d/passages]} (om/props this)
                 computed (om/get-computed this)]
-            (apply dom/ul #js {:id "sidebar-passages"}
-                   (map (comp sidebar-passage-view
-                           #(om/computed % computed))
-                        passages)))))
+            (dom/div nil
+                     (dom/h3 nil "Passages")
+                     (apply dom/ul #js {:id "sidebar-passages"}
+                            (map (comp sidebar-passage-view
+                                    #(om/computed % computed))
+                                 passages))))))
 
 (def sidebar-passages-view (om/factory SidebarPassages))
+
+(defui SidebarFacts
+  Object
+  (render [this]
+          (let [{:keys [all-facts]} (om/props this)
+                all-facts (sort-by :d/description all-facts)]
+            (dom/div nil
+                     (dom/h3 nil "Facts")
+                     (apply dom/ul #js {:id "sidebar-facts"}
+                            (map sidebar-fact-view all-facts))))))
+
+(def sidebar-facts-view (om/factory SidebarFacts))
 
 (defui EditingPassage
   static om/Ident
@@ -114,7 +170,57 @@
 
   static om/IQuery
   (query [this]
-         [:d/id :d/text]))
+         (let [fact-query (om/get-query SidebarFact)]
+           `[:d/id
+             :d/text
+             {:d/consequences ~fact-query}
+             {:d/assumptions ~fact-query}])))
+
+(defn result-list [ac type results on-select]
+  (dom/ul #js {:key (str type "-result-list")
+               :className "result-list"
+               :id (str type "-result-list")}
+          (map #(let [{:keys [d/description d/id] :as fact} %]
+                  (dom/li #js {:onClick (fn [_]
+                                          (om/set-query! ac {:params {:query ""}})
+                                          (on-select fact))}
+                          description))
+               results)))
+
+(defn search-field [ac type query on-select]
+  (dom/input
+   #js {:key (str type "-search-field")
+        :className "search-field"
+        :value query
+        :placeholder "add..."
+        :onKeyPress (fn [e]
+                      (when (= 13 (.-charCode e))
+                        (om/set-query! ac {:params {:query ""}})
+                        (on-select (s/indeed (.. e -target -value)))))
+        :onChange
+        (fn [e]
+          (om/set-query! ac
+                         {:params {:query (.. e -target -value)}}))}))
+
+(defui AutoCompleter
+  static om/IQueryParams
+  (params [_]
+          {:query ""})
+  static om/IQuery
+  (query [_]
+         '[(:search/results {:query ?query})])
+  Object
+  (render [this]
+          (let [{:keys [search/results]} (om/props this)
+                {:keys [type on-select]} (om/get-computed this)
+                sorted (->> results
+                            (sort-by :d/description))]
+            (dom/div nil
+                     (cond->
+                         [(search-field this type (:query (om/get-params this)) on-select)]
+                         (not (empty? sorted)) (conj (result-list this type sorted on-select)))))))
+
+(def auto-completer (om/factory AutoCompleter))
 
 (defui Editing
   static om/IQuery
@@ -125,8 +231,8 @@
   Object
   (render [this]
           (let [{:keys [d/passage]} (om/props this)
-                {:keys [update-passage!]} (om/get-computed this)
-                {:keys [d/text d/id]} passage]
+                {:keys [update-passage! all-facts]} (om/get-computed this)
+                {:keys [d/text d/id d/assumptions d/consequences]} passage]
             (dom/div nil
                      (dom/textarea #js {:id "text"
                                         :rows 10
@@ -134,7 +240,24 @@
                                         :onChange (fn [e]
                                                     (let [new-text (.. e -target -value)]
                                                       (update-passage! id {:d/text new-text})))
-                                        :value text})))))
+                                        :value text})
+                     (dom/div #js {:className "assumptions"}
+                              (dom/h3 nil "Assumptions")
+                              (auto-completer (om/computed {} {:type :assumptions
+                                                               :on-select (fn [fact]
+                                                                            (update-passage! id {:alter {:add-assumption fact}}))}))
+                              (apply dom/ul nil
+                                     (map #(dom/li nil (:d/description %)) assumptions)))
+
+                     (dom/div #js {:className "consequences"}
+                              (dom/h3 nil "Consequences")
+                              (auto-completer (om/computed {} {:type :consequences
+                                                               :on-select (fn [fact]
+                                                                            (update-passage! id {:alter {:add-consequence fact}}))}))
+                              (apply dom/ul nil
+                                     (map #(dom/li nil (:d/description %)) consequences)))
+
+                              ))))
 
 (def editing-view (om/factory Editing))
 
@@ -142,24 +265,29 @@
   static om/IQuery
   (query [this]
          (let [subquery (om/get-query SidebarPassage)
-               editing-subquery (om/get-query Editing)]
+               editing-subquery (om/get-query Editing)
+               fact-subquery (om/get-query SidebarFact)]
            `[{:d/passages ~subquery}
-             {:editing ~editing-subquery}]))
+             {:editing ~editing-subquery}
+             {:all-facts ~fact-subquery}]))
 
   Object
   (render [this]
-          (let [{:keys [editing] :as props} (om/props this)
+          (let [{:keys [editing all-facts] :as props} (om/props this)
                 edit! (fn [id]
                         (om/transact! this `[(editor/edit! {:id ~id})]))
                 update-passage! (fn [id props]
                                   (om/transact! this `[(editor/update-passage {:id ~id :props ~props})]))]
             (dom/div nil
-                     (dom/div #js {:id "sidebar"}
+                     (dom/div #js {:id "left-sidebar" :className "sidebar"}
                               (sidebar-passages-view (om/computed props
                                                                   {:edit! edit!})))
                      (dom/div #js {:id "editing"}
                               (editing-view (om/computed editing
-                                                         {:update-passage! update-passage!})))))))
+                                                         {:update-passage! update-passage!
+                                                          :all-facts all-facts})))
+                     (dom/div #js {:id "right-sidebar" :className "sidebar"}
+                              (sidebar-facts-view props))))))
 
 (def reconciler
   (om/reconciler {:state init-data
@@ -184,10 +312,23 @@
   [{:keys [state]} _ {:keys [id props]}]
   {:action
    (fn []
-     (swap! state
-            (fn [st]
-              (update-in st [:passage/by-id id]
-                         #(merge % props)))))})
+     (if-let [alter (:alter props)]
+       (cond
+         (:add-assumption alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/assumptions]
+                             conj (:add-assumption alter))))
+
+         (:add-consequence alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/consequences]
+                             conj (:add-consequence alter)))))
+       (swap! state
+              (fn [st]
+                (update-in st [:passage/by-id id]
+                           #(merge % props))))))})
 
 (comment
 
@@ -195,6 +336,13 @@
   (require '[cljs.pprint :as pp])
 
   (def norm-data (om/tree->db Editor init-data true))
+
+  (om/get-query Editor)
+
+
+  (get-in norm-data [:passage/by-id :in-the-building :d/consequences])
+
+  (:om.next/tables norm-data)
 
   (def parser (om/parser {:read read}))
 

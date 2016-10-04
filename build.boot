@@ -70,7 +70,6 @@
   (comp (editor-development)
      (run)))
 
-
 (deftask testing []
   (set-env! :source-paths #(conj % "test/cljs"))
   identity)

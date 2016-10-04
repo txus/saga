@@ -11,12 +11,16 @@ body {
     width: 100%;
 }
 
-#sidebar {
-    float: left;
+.sidebar {
     width: 25%;
     padding: 0;
-    border-right: 1px solid #DDD;
     font-size: 13px;
+
+    h3 {
+        font-size: 15px;
+        text-transform: uppercase;
+        text-align: center;
+    }
 
     ul {
         padding: 0;
@@ -34,18 +38,44 @@ body {
     }
 }
 
+#left-sidebar {
+    float: left;
+    border-right: 1px solid #DDD;
+}
+
+#right-sidebar {
+    float: left;
+    width: 20%;
+    border-left: 1px solid #DDD;
+}
+
 #editing {
     float:left;
     padding: 15px;
-    width: 60%;
-
+    width: 50%;
+    margin-right: 10px;
 
     textarea {
         border: 1px solid #DDD;
-        width: 100%;
+        width: 95%;
         font-size: 16px;
         padding: 15px;
     }
 
+    h3 {
+        font-size: 15px;
+        text-transform: uppercase;
+        text-align: center;
+    }
 
+    .assumptions, .consequences {
+        float: left;
+        width: 50%;
+    }
+
+    .search-field {
+        width: 90%;
+        padding: 5px 10px;
+        font-size: 15px;
+    }
 }

@@ -40,8 +40,8 @@
 (defn passage [id text]
   {:d/id (mk-id id)
    :d/text text
-   :d/assumptions #{}
-   :d/consequences #{}
+   :d/assumptions [] #_#{}
+   :d/consequences [] #_#{}
    :d/choices {}})
 
 (defn assumes [passage fact]
