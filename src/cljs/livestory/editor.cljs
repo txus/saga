@@ -103,6 +103,9 @@
         (s/assumes (s/indeed "old man disapproved me"))
         (s/entails (s/indeed "the end")))]})
 
+(defn title [{:keys [d/description d/negated?]}]
+  (str description (when negated? " (not)")))
+
 (defui SidebarFact
   static om/Ident
   (ident [this {:keys [d/id]}]
@@ -114,9 +117,12 @@
 
   Object
   (render [this]
-          (let [{:keys [d/id d/description d/negated?]} (om/props this)]
-            (dom/li nil
-                    (str description)))))
+          (let [{:keys [d/id d/description d/negated?] :as fact} (om/props this)
+                {:keys [on-drag-start]} (om/get-computed this)]
+            (dom/li #js {:draggable true
+                         :className (str "fact " (if negated? "negative" "positive"))
+                         :onDragStart (fn [_] (on-drag-start (select-keys fact (om/get-query SidebarFact))))}
+                    (title fact)))))
 
 (def sidebar-fact-view (om/factory SidebarFact {:keyfn (comp str (juxt :d/id :d/negated?))}))
 
@@ -132,8 +138,18 @@
   Object
   (render [this]
           (let [{:keys [d/id]} (om/props this)
-                {:keys [edit!]} (om/get-computed this)]
-            (dom/li #js {:onClick #(edit! id)} (str id)))))
+                {:keys [delete! edit!]} (om/get-computed this)]
+            (dom/div nil
+                     (dom/li nil
+                             (dom/a #js {:className "edit"
+                                         :onClick #(edit! id)}
+                                    (dom/span nil (str id)))
+                             (dom/a #js {:className "delete"
+                                         :onClick (fn [e]
+                                                    (.preventDefault e)
+                                                    (when (.confirm js/window "Are you sure?")
+                                                      (delete! id)))}
+                                    "X"))))))
 
 (def sidebar-passage-view (om/factory SidebarPassage {:keyfn :d/id}))
 
@@ -141,8 +157,13 @@
   Object
   (render [this]
           (let [{:keys [d/passages]} (om/props this)
-                computed (om/get-computed this)]
+                {:keys [new-passage] :as computed} (om/get-computed this)]
             (dom/div nil
+                     (dom/a #js {:className "new-passage"
+                                 :onClick (fn [_]
+                                            (when-let [id (.prompt js/window)]
+                                              (new-passage (s/passage id "write something cool!"))))}
+                            "+")
                      (dom/h3 nil "Passages")
                      (apply dom/ul #js {:id "sidebar-passages"}
                             (map (comp sidebar-passage-view
@@ -155,11 +176,12 @@
   Object
   (render [this]
           (let [{:keys [all-facts]} (om/props this)
+                computed (om/get-computed this)
                 all-facts (sort-by :d/description all-facts)]
             (dom/div nil
                      (dom/h3 nil "Facts")
                      (apply dom/ul #js {:id "sidebar-facts"}
-                            (map sidebar-fact-view all-facts))))))
+                            (map #(sidebar-fact-view (om/computed % computed)) all-facts))))))
 
 (def sidebar-facts-view (om/factory SidebarFacts))
 
@@ -184,7 +206,7 @@
                   (dom/li #js {:onClick (fn [_]
                                           (om/set-query! ac {:params {:query ""}})
                                           (on-select fact))}
-                          description))
+                          (title fact)))
                results)))
 
 (defn search-field [ac type query on-select]
@@ -195,8 +217,12 @@
         :placeholder "add..."
         :onKeyPress (fn [e]
                       (when (= 13 (.-charCode e))
-                        (om/set-query! ac {:params {:query ""}})
-                        (on-select (s/indeed (.. e -target -value)))))
+                        (let [desc (.. e -target -value)
+                              fact (if (str/ends-with? desc " (not)")
+                                     (s/not (str/replace desc #" \(not\)$" ""))
+                                     (s/indeed desc))]
+                          (om/set-query! ac {:params {:query ""}})
+                          (on-select fact))))
         :onChange
         (fn [e]
           (om/set-query! ac
@@ -225,39 +251,61 @@
 (defui Editing
   static om/IQuery
   (query [this]
-         (let [sub (om/get-query EditingPassage)]
-           `[{:d/passage ~sub}]))
+         (let [sub (om/get-query EditingPassage)
+               fact-sub (om/get-query SidebarFact)]
+           `[{:d/passage ~sub}
+             {:dragging ~fact-sub}]))
 
-  Object
-  (render [this]
-          (let [{:keys [d/passage]} (om/props this)
-                {:keys [update-passage! all-facts]} (om/get-computed this)
-                {:keys [d/text d/id d/assumptions d/consequences]} passage]
+Object
+(render [this]
+        (let [{:keys [d/passage dragging]} (om/props this)
+              {:keys [update-passage! all-facts]} (om/get-computed this)
+              {:keys [d/text d/id d/assumptions d/consequences]} passage]
+          (if (empty? passage)
+            (dom/div nil "Select an existing passage or create a new one.")
             (dom/div nil
-                     (dom/textarea #js {:id "text"
+                      (dom/textarea #js {:id "text"
                                         :rows 10
                                         :cols 10
                                         :onChange (fn [e]
                                                     (let [new-text (.. e -target -value)]
                                                       (update-passage! id {:d/text new-text})))
                                         :value text})
-                     (dom/div #js {:className "assumptions"}
+                      (dom/div #js {:className "assumptions"
+                                    :onDragOver (fn [e] (.preventDefault e))
+                                    :onDrop (fn [_]
+                                              (when dragging
+                                                (update-passage! id {:alter {:add-assumption dragging}})))}
                               (dom/h3 nil "Assumptions")
                               (auto-completer (om/computed {} {:type :assumptions
-                                                               :on-select (fn [fact]
+                                                                :on-select (fn [fact]
                                                                             (update-passage! id {:alter {:add-assumption fact}}))}))
                               (apply dom/ul nil
-                                     (map #(dom/li nil (:d/description %)) assumptions)))
+                                    (map (fn [{:keys [d/negated?] :as fact}]
+                                              (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
+                                                          :onClick
+                                                            (fn [_]
+                                                              (update-passage! id {:alter {:remove-assumption fact}}))}
+                                                      (title fact)))
+                                            assumptions)))
 
-                     (dom/div #js {:className "consequences"}
-                              (dom/h3 nil "Consequences")
-                              (auto-completer (om/computed {} {:type :consequences
-                                                               :on-select (fn [fact]
-                                                                            (update-passage! id {:alter {:add-consequence fact}}))}))
-                              (apply dom/ul nil
-                                     (map #(dom/li nil (:d/description %)) consequences)))
-
-                              ))))
+                      (dom/div #js {:className "consequences"
+                                    :onDragOver (fn [e] (.preventDefault e))
+                                    :onDrop (fn [_]
+                                              (when dragging
+                                                (update-passage! id {:alter {:add-consequence dragging}})))}
+                                (dom/h3 nil "Consequences")
+                                (auto-completer (om/computed {} {:type :consequences
+                                                                :on-select (fn [fact]
+                                                                              (update-passage! id {:alter {:add-consequence fact}}))}))
+                                (apply dom/ul nil
+                                      (map (fn [{:keys [d/negated?] :as fact}]
+                                                (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
+                                                            :onClick
+                                                              (fn [_]
+                                                                (update-passage! id {:alter {:remove-consequence fact}}))}
+                                                      (title fact)))
+                                            consequences))))))))
 
 (def editing-view (om/factory Editing))
 
@@ -276,18 +324,27 @@
           (let [{:keys [editing all-facts] :as props} (om/props this)
                 edit! (fn [id]
                         (om/transact! this `[(editor/edit! {:id ~id})]))
+                new-passage (fn [p]
+                              (om/transact! this `[(editor/new-passage {:passage ~p})]))
+                delete! (fn [id]
+                        (om/transact! this `[(editor/delete! {:id ~id})]))
+                on-drag-start (fn [fact]
+                                (om/transact! this `[(editor/dragging {:fact ~fact})]))
                 update-passage! (fn [id props]
                                   (om/transact! this `[(editor/update-passage {:id ~id :props ~props})]))]
             (dom/div nil
                      (dom/div #js {:id "left-sidebar" :className "sidebar"}
                               (sidebar-passages-view (om/computed props
-                                                                  {:edit! edit!})))
+                                                                  {:edit! edit!
+                                                                   :new-passage new-passage
+                                                                   :delete! delete!})))
                      (dom/div #js {:id "editing"}
                               (editing-view (om/computed editing
                                                          {:update-passage! update-passage!
                                                           :all-facts all-facts})))
                      (dom/div #js {:id "right-sidebar" :className "sidebar"}
-                              (sidebar-facts-view props))))))
+                              (sidebar-facts-view (om/computed props
+                                                               {:on-drag-start on-drag-start})))))))
 
 (def reconciler
   (om/reconciler {:state init-data
@@ -305,8 +362,44 @@
    (fn []
      (swap! state
             (fn [st]
-              (assoc-in st [:editing :d/passage]
-                        [:passage/by-id id]))))})
+              (when (-> st :passage/by-id (get id))
+                (assoc-in st [:editing :d/passage]
+                          [:passage/by-id id])))))})
+
+(defmethod mutate 'editor/new-passage
+  [{:keys [state]} _ {:keys [passage]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (let [id (:d/id passage)]
+                (-> st
+                    (update :d/passages conj passage)
+                    (update :passage/by-id assoc id passage)
+                    (assoc-in [:editing :d/passage] [:passage/by-id id]))))))})
+
+(defmethod mutate 'editor/delete!
+  [{:keys [state]} _ {:keys [id]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (let [st (if (= id (-> st :editing :d/passage second))
+                         (update st :editing dissoc :d/passage)
+                         st)]
+                (update st :d/passages (fn [passages]
+                                         (vec (remove (fn [[_ pid]] (= id pid)) passages))))))))})
+
+(defmethod mutate 'editor/dragging
+  [{:keys [state]} _ {:keys [fact]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (assoc-in st [:editing :dragging] fact))))})
+
+(defn format-fact [fact]
+  (select-keys fact (om/get-query SidebarFact)))
 
 (defmethod mutate 'editor/update-passage
   [{:keys [state]} _ {:keys [id props]}]
@@ -318,13 +411,42 @@
          (swap! state
                 (fn [st]
                   (update-in st [:passage/by-id id :d/assumptions]
-                             conj (:add-assumption alter))))
+                             (fn [assumptions]
+                               (let [fact (format-fact (:add-assumption alter))]
+                                 (-> assumptions
+                                     set
+                                     (disj (update fact :d/negated? not))
+                                     (conj fact)
+                                     vec))))))
+
+         (:remove-assumption alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/assumptions]
+                             (fn [assumptions]
+                               (let [fact-id (:d/id (:remove-assumption alter))]
+                                 (vec (remove (comp (partial = fact-id) :d/id) assumptions)))))))
+
+         (:remove-consequence alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/consequences]
+                             (fn [consequences]
+                               (let [fact-id (:d/id (:remove-consequence alter))]
+                                 (vec (remove (comp (partial = fact-id) :d/id) consequences)))))))
 
          (:add-consequence alter)
          (swap! state
                 (fn [st]
                   (update-in st [:passage/by-id id :d/consequences]
-                             conj (:add-consequence alter)))))
+                             (fn [consequences]
+                               (let [fact (format-fact (:add-consequence alter))]
+                                 (-> consequences
+                                     set
+                                     (disj (update fact :d/negated? not))
+                                     (conj fact)
+                                     vec)))))))
+
        (swap! state
               (fn [st]
                 (update-in st [:passage/by-id id]
@@ -358,5 +480,7 @@
 
   (parser {:state (atom norm-data)} '[{:d/current-passage [:d/text]}])
 
+
+  @reconciler
 
   )

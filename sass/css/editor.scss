@@ -11,6 +11,16 @@ body {
     width: 100%;
 }
 
+.new-passage {
+    float: left;
+    font-size: 20px;
+    border: 1px solid black;
+    line-height: 20px;
+    cursor: pointer;
+
+    padding: 5px;
+}
+
 .sidebar {
     width: 25%;
     padding: 0;
@@ -30,11 +40,45 @@ body {
         li {
             cursor: pointer;
             padding: 15px;
+            width: 80%;
+            position: relative;
 
             &:hover {
                 background-color: #DDD;
             }
+
+            a.edit {
+                height: 100%;
+                width: 80%;
+                display: block;
+            }
+
+            a.delete {
+                float: right;
+                padding: 5px;
+                margin-top: -23px;
+                border: 1px solid black;
+                background-color: #FEE;
+
+                &:hover {
+                    background-color: red;
+                    color: white;
+                }
+            }
+
         }
+
+
+    }
+}
+
+.fact {
+    &.positive {
+        background-color: #DFD;
+    }
+
+    &.negative {
+        background-color: #FDD;
     }
 }
 
