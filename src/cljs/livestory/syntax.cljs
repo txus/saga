@@ -31,9 +31,9 @@
 ;; CHOICES
 
 (defn when-chose [description & consequences]
-  {(mk-id description)
-   [(display description)
-    (set consequences)]})
+  {:d/id (mk-id description)
+   :d/description (display description)
+   :d/consequences (into [] consequences)})
 
 ;; PASSAGES
 
@@ -42,7 +42,7 @@
    :d/text text
    :d/assumptions [] #_#{}
    :d/consequences [] #_#{}
-   :d/choices {}})
+   :d/choices []})
 
 (defn assumes [passage fact]
   (update passage :d/assumptions conj fact))
@@ -51,4 +51,4 @@
   (update passage :d/consequences conj consequence))
 
 (defn choices [passage & choices]
-  (update passage :d/choices #(apply merge % choices)))
+  (update passage :d/choices #(into % choices)))

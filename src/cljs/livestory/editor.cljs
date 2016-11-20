@@ -20,14 +20,13 @@
 
 (defn- all-facts [st]
   (->> (:d/passages st)
-       (map (fn [path]
-              (let [{:keys [d/assumptions d/consequences d/choices]} (get-in st path)]
-
-                (apply set/union
-                       (set assumptions)
-                       (set consequences)
-                       (map last (vals choices))))))
-       (apply set/union)))
+       (mapcat (fn [path]
+              (let [{:keys [d/assumptions d/consequences d/choices]} (get-in st path)
+                    passage-facts (concat assumptions
+                                          consequences
+                                          (mapcat :d/consequences choices))]
+                passage-facts)))
+       set))
 
 (defmethod read :all-facts
   [{:keys [state query] :as env} k params]
@@ -39,7 +38,8 @@
   (let [st @state]
     (if (empty? query)
       {:value #{}}
-      {:value (into #{} (filter (fn [{:keys [d/description]}]
+      {:value (into #{} (filter (fn [{:keys [d/description] :as fact}]
+                                  (js/console.log query fact)
                                   (str/includes? (str/lower-case description)
                                                  (str/lower-case query)))
                                 (all-facts st)))})))
@@ -185,6 +185,12 @@
 
 (def sidebar-facts-view (om/factory SidebarFacts))
 
+(defui Choice
+  static om/IQuery
+  (query [this]
+         (let [fact-query (om/get-query SidebarFact)]
+           `[:d/id :d/description {:d/consequences ~fact-query}])))
+
 (defui EditingPassage
   static om/Ident
   (ident [this {:keys [d/id]}]
@@ -192,11 +198,13 @@
 
   static om/IQuery
   (query [this]
-         (let [fact-query (om/get-query SidebarFact)]
+         (let [fact-query (om/get-query SidebarFact)
+               choice-query (om/get-query Choice)]
            `[:d/id
              :d/text
              {:d/consequences ~fact-query}
-             {:d/assumptions ~fact-query}])))
+             {:d/assumptions ~fact-query}
+             {:d/choices ~choice-query}])))
 
 (defn result-list [ac type results on-select]
   (dom/ul #js {:key (str type "-result-list")
@@ -208,6 +216,27 @@
                                           (on-select fact))}
                           (title fact)))
                results)))
+
+(defui NewChoiceField
+  Object
+  (render [this]
+          (let [{:keys [on-enter]} (om/get-computed this)
+                {:keys [text]} (om/get-state this)]
+            (dom/input
+             #js {:key "new-choice-input"
+                  :className "search-field"
+                  :value text
+                  :placeholder "add choice..."
+                  :onKeyPress (fn [e]
+                                (when (= 13 (.-charCode e))
+                                  (let [desc (.. e -target -value)]
+                                    (on-enter desc)
+                                    (om/set-state! this {:text ""}))))
+                  :onChange
+                  (fn [e]
+                    (om/set-state! this {:text (.. e -target -value)}))}))))
+
+(def new-choice-field (om/factory NewChoiceField))
 
 (defn search-field [ac type query on-select]
   (dom/input
@@ -256,11 +285,12 @@
            `[{:d/passage ~sub}
              {:dragging ~fact-sub}]))
 
-Object
-(render [this]
+  Object
+  (render [this]
         (let [{:keys [d/passage dragging]} (om/props this)
               {:keys [update-passage! all-facts]} (om/get-computed this)
-              {:keys [d/text d/id d/assumptions d/consequences]} passage]
+              {:keys [d/text d/id d/assumptions d/consequences d/choices]} passage]
+          (js/console.log choices)
           (if (empty? passage)
             (dom/div nil "Select an existing passage or create a new one.")
             (dom/div nil
@@ -305,7 +335,39 @@ Object
                                                               (fn [_]
                                                                 (update-passage! id {:alter {:remove-consequence fact}}))}
                                                       (title fact)))
-                                            consequences))))))))
+                                           consequences)))
+                      (dom/div #js {:className "choices"}
+                               (dom/h3 nil "Choices")
+                               (new-choice-field (om/computed {} {:on-enter (fn [txt]
+                                                                              (update-passage! id {:alter {:add-choice (s/when-chose txt)}}))}))
+                               (apply dom/div nil
+                                      (map (fn [{:keys [d/description d/consequences] :as choice}]
+                                             (let [choice-id (:d/id choice)]
+                                              (dom/div #js {:className "choice"
+                                                            :onDragOver (fn [e] (.preventDefault e))
+                                                            :onDrop (fn [_]
+                                                                      (when dragging
+                                                                        (update-passage! id {:alter {:add-consequence-to-choice {:d/id choice-id :consequence dragging}}})))}
+                                                       (dom/h5 nil
+                                                               (str description " ")
+                                                               (dom/a #js {:className "delete"
+                                                                           :onClick (fn [e]
+                                                                                     (.preventDefault e)
+                                                                                     (when (.confirm js/window "Are you sure?")
+                                                                                       (update-passage! id {:alter {:remove-choice {:d/id choice-id}}})))}
+                                                                      "X"))
+                                                      (auto-completer (om/computed {} {:type (keyword (str (name choice-id) "-consequences"))
+                                                                                       :on-select (fn [fact]
+                                                                                                    (update-passage! id {:alter {:add-consequence-to-choice {:d/id choice-id :consequence fact}}}))}))
+                                                      (apply dom/ul nil
+                                                              (map (fn [{:keys [d/negated?] :as fact}]
+                                                                    (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
+                                                                                  :onClick
+                                                                                  (fn [_]
+                                                                                    (update-passage! id {:alter {:remove-consequence-from-choice {:d/id choice-id :consequence-id (:d/id fact)}}}))}
+                                                                            (title fact)))
+                                                                  (sort-by :d/id consequences))))))
+                                           (sort-by :d/id choices)))))))))
 
 (def editing-view (om/factory Editing))
 
@@ -401,6 +463,11 @@ Object
 (defn format-fact [fact]
   (select-keys fact (om/get-query SidebarFact)))
 
+(defn update-when [coll pred update-fn]
+  (into
+   (remove pred coll)
+   (map update-fn (filter pred coll))))
+
 (defmethod mutate 'editor/update-passage
   [{:keys [state]} _ {:keys [id props]}]
   {:action
@@ -435,6 +502,47 @@ Object
                                (let [fact-id (:d/id (:remove-consequence alter))]
                                  (vec (remove (comp (partial = fact-id) :d/id) consequences)))))))
 
+         (:add-choice alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/choices] conj (:add-choice alter))))
+
+         (:remove-choice alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/choices]
+                             (fn [choices]
+                               (let [to-remove (:d/id (:remove-choice alter))]
+                                 (into [] (remove #(= (:d/id %) to-remove) choices)))))))
+
+         (:add-consequence-to-choice alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/choices]
+                             (fn [choices]
+                               (let [{:keys [consequence]} (:add-consequence-to-choice alter)
+                                     choice-id (:d/id (:add-consequence-to-choice alter))]
+                                 (into []
+                                       (update-when choices
+                                                    #(= (:d/id %) choice-id)
+                                                    (fn [choice]
+                                                      (update choice :d/consequences (fn [conseqs]
+                                                                                       (into [] (set (conj conseqs consequence)))))))))))))
+
+         (:remove-consequence-from-choice alter)
+         (swap! state
+                (fn [st]
+                  (update-in st [:passage/by-id id :d/choices]
+                             (fn [choices]
+                               (let [{:keys [consequence-id]} (:remove-consequence-from-choice alter)
+                                     choice-id (:d/id (:remove-consequence-from-choice alter))]
+                                 (into []
+                                       (update-when choices
+                                                    #(= (:d/id %) choice-id)
+                                                    (fn [choice]
+                                                      (update choice :d/consequences (fn [conseqs]
+                                                                                       (into [] (remove (comp (partial = consequence-id) :d/id) conseqs))))))))))))
+
          (:add-consequence alter)
          (swap! state
                 (fn [st]
@@ -458,9 +566,13 @@ Object
   (require '[cljs.pprint :as pp])
 
   (def norm-data (om/tree->db Editor init-data true))
+  init-data
 
-  (om/get-query Editor)
-
+ [{:d/passages [:d/id]} {:editing [{:d/passage [:d/id :d/text {:d/consequences
+ [:d/id :d/negated? :d/description]} {:d/assumptions [:d/id :d/negated?
+ :d/description]} {:d/choices [:d/key :d/description {:d/consequences [:d/id
+ :d/negated? :d/description]}]}]} {:dragging [:d/id :d/negated?
+ :d/description]}]} {:all-facts [:d/id :d/negated? :d/description]}]
 
   (get-in norm-data [:passage/by-id :in-the-building :d/consequences])
 

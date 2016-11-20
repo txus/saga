@@ -21,6 +21,19 @@ body {
     padding: 5px;
 }
 
+a.delete {
+    float: right;
+    padding: 5px;
+    border: 1px solid black;
+    background-color: #FEE;
+
+    &:hover {
+        background-color: red;
+        color: white;
+    }
+}
+
+
 .sidebar {
     width: 25%;
     padding: 0;
@@ -47,23 +60,14 @@ body {
                 background-color: #DDD;
             }
 
+            a.delete {
+                margin-top: -23px;
+            }
+
             a.edit {
                 height: 100%;
                 width: 80%;
                 display: block;
-            }
-
-            a.delete {
-                float: right;
-                padding: 5px;
-                margin-top: -23px;
-                border: 1px solid black;
-                background-color: #FEE;
-
-                &:hover {
-                    background-color: red;
-                    color: white;
-                }
             }
 
         }
