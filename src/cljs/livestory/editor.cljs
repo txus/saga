@@ -560,6 +560,17 @@
                 (update-in st [:passage/by-id id]
                            #(merge % props))))))})
 
+(defn save-story! [name passages])
+
+(defn current-passages []
+  (let [raw-data @reconciler
+        passages (:d/passages
+                  (om/db->tree
+                   [{:d/passages (om/get-query EditingPassage)}]
+                   raw-data
+                   raw-data))]
+    passages))
+
 (comment
 
 
@@ -568,6 +579,7 @@
   (def norm-data (om/tree->db Editor init-data true))
   init-data
 
+
  [{:d/passages [:d/id]} {:editing [{:d/passage [:d/id :d/text {:d/consequences
  [:d/id :d/negated? :d/description]} {:d/assumptions [:d/id :d/negated?
  :d/description]} {:d/choices [:d/key :d/description {:d/consequences [:d/id
@@ -575,6 +587,7 @@
  :d/description]}]} {:all-facts [:d/id :d/negated? :d/description]}]
 
   (get-in norm-data [:passage/by-id :in-the-building :d/consequences])
+
 
   (:om.next/tables norm-data)
 
