@@ -21,11 +21,11 @@
 (defn- all-facts [st]
   (->> (:d/passages st)
        (mapcat (fn [path]
-              (let [{:keys [d/assumptions d/consequences d/choices]} (get-in st path)
-                    passage-facts (concat assumptions
-                                          consequences
-                                          (mapcat :d/consequences choices))]
-                passage-facts)))
+                 (let [{:keys [d/assumptions d/consequences d/choices]} (get-in st path)
+                       passage-facts (concat assumptions
+                                             consequences
+                                             (mapcat :d/consequences choices))]
+                   passage-facts)))
        set))
 
 (defmethod read :all-facts
@@ -39,7 +39,6 @@
     (if (empty? query)
       {:value #{}}
       {:value (into #{} (filter (fn [{:keys [d/description] :as fact}]
-                                  (js/console.log query fact)
                                   (str/includes? (str/lower-case description)
                                                  (str/lower-case query)))
                                 (all-facts st)))})))
@@ -56,7 +55,7 @@
    {:d/passage {:d/id :in-the-building}}
    :d/passages
    [(-> (s/passage :in-the-building
-                 "It was raining outside. The street was soaking wet.")
+                   "It was raining outside. The street was soaking wet.")
         (s/entails (s/indeed "went out to the street"))
         (s/choices
          (s/when-chose "I went out without an umbrella"
@@ -273,7 +272,7 @@
             (dom/div nil
                      (cond->
                          [(search-field this type (:query (om/get-params this)) on-select)]
-                         (not (empty? sorted)) (conj (result-list this type sorted on-select)))))))
+                       (not (empty? sorted)) (conj (result-list this type sorted on-select)))))))
 
 (def auto-completer (om/factory AutoCompleter))
 
@@ -287,87 +286,87 @@
 
   Object
   (render [this]
-        (let [{:keys [d/passage dragging]} (om/props this)
-              {:keys [update-passage! all-facts]} (om/get-computed this)
-              {:keys [d/text d/id d/assumptions d/consequences d/choices]} passage]
-          (js/console.log choices)
-          (if (empty? passage)
-            (dom/div nil "Select an existing passage or create a new one.")
-            (dom/div nil
-                      (dom/textarea #js {:id "text"
-                                        :rows 10
-                                        :cols 10
-                                        :onChange (fn [e]
-                                                    (let [new-text (.. e -target -value)]
-                                                      (update-passage! id {:d/text new-text})))
-                                        :value text})
-                      (dom/div #js {:className "assumptions"
-                                    :onDragOver (fn [e] (.preventDefault e))
-                                    :onDrop (fn [_]
-                                              (when dragging
-                                                (update-passage! id {:alter {:add-assumption dragging}})))}
-                              (dom/h3 nil "Assumptions")
-                              (auto-completer (om/computed {} {:type :assumptions
-                                                                :on-select (fn [fact]
-                                                                            (update-passage! id {:alter {:add-assumption fact}}))}))
-                              (apply dom/ul nil
-                                    (map (fn [{:keys [d/negated?] :as fact}]
+          (let [{:keys [d/passage dragging]} (om/props this)
+                {:keys [update-passage! all-facts]} (om/get-computed this)
+                {:keys [d/text d/id d/assumptions d/consequences d/choices]} passage]
+            (js/console.log choices)
+            (if (empty? passage)
+              (dom/div nil "Select an existing passage or create a new one.")
+              (dom/div nil
+                       (dom/textarea #js {:id "text"
+                                          :rows 10
+                                          :cols 10
+                                          :onChange (fn [e]
+                                                      (let [new-text (.. e -target -value)]
+                                                        (update-passage! id {:d/text new-text})))
+                                          :value text})
+                       (dom/div #js {:className "assumptions"
+                                     :onDragOver (fn [e] (.preventDefault e))
+                                     :onDrop (fn [_]
+                                               (when dragging
+                                                 (update-passage! id {:alter {:add-assumption dragging}})))}
+                                (dom/h3 nil "Assumptions")
+                                (auto-completer (om/computed {} {:type :assumptions
+                                                                 :on-select (fn [fact]
+                                                                              (update-passage! id {:alter {:add-assumption fact}}))}))
+                                (apply dom/ul nil
+                                       (map (fn [{:keys [d/negated?] :as fact}]
                                               (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
-                                                          :onClick
-                                                            (fn [_]
-                                                              (update-passage! id {:alter {:remove-assumption fact}}))}
+                                                           :onClick
+                                                           (fn [_]
+                                                             (update-passage! id {:alter {:remove-assumption fact}}))}
                                                       (title fact)))
                                             assumptions)))
 
-                      (dom/div #js {:className "consequences"
-                                    :onDragOver (fn [e] (.preventDefault e))
-                                    :onDrop (fn [_]
-                                              (when dragging
-                                                (update-passage! id {:alter {:add-consequence dragging}})))}
+                       (dom/div #js {:className "consequences"
+                                     :onDragOver (fn [e] (.preventDefault e))
+                                     :onDrop (fn [_]
+                                               (when dragging
+                                                 (update-passage! id {:alter {:add-consequence dragging}})))}
                                 (dom/h3 nil "Consequences")
                                 (auto-completer (om/computed {} {:type :consequences
-                                                                :on-select (fn [fact]
+                                                                 :on-select (fn [fact]
                                                                               (update-passage! id {:alter {:add-consequence fact}}))}))
                                 (apply dom/ul nil
-                                      (map (fn [{:keys [d/negated?] :as fact}]
-                                                (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
-                                                            :onClick
-                                                              (fn [_]
-                                                                (update-passage! id {:alter {:remove-consequence fact}}))}
+                                       (map (fn [{:keys [d/negated?] :as fact}]
+                                              (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
+                                                           :onClick
+                                                           (fn [_]
+                                                             (update-passage! id {:alter {:remove-consequence fact}}))}
                                                       (title fact)))
-                                           consequences)))
-                      (dom/div #js {:className "choices"}
-                               (dom/h3 nil "Choices")
-                               (new-choice-field (om/computed {} {:on-enter (fn [txt]
-                                                                              (update-passage! id {:alter {:add-choice (s/when-chose txt)}}))}))
-                               (apply dom/div nil
-                                      (map (fn [{:keys [d/description d/consequences] :as choice}]
-                                             (let [choice-id (:d/id choice)]
-                                              (dom/div #js {:className "choice"
-                                                            :onDragOver (fn [e] (.preventDefault e))
-                                                            :onDrop (fn [_]
-                                                                      (when dragging
-                                                                        (update-passage! id {:alter {:add-consequence-to-choice {:d/id choice-id :consequence dragging}}})))}
-                                                       (dom/h5 nil
-                                                               (str description " ")
-                                                               (dom/a #js {:className "delete"
-                                                                           :onClick (fn [e]
-                                                                                     (.preventDefault e)
-                                                                                     (when (.confirm js/window "Are you sure?")
-                                                                                       (update-passage! id {:alter {:remove-choice {:d/id choice-id}}})))}
-                                                                      "X"))
-                                                      (auto-completer (om/computed {} {:type (keyword (str (name choice-id) "-consequences"))
-                                                                                       :on-select (fn [fact]
-                                                                                                    (update-passage! id {:alter {:add-consequence-to-choice {:d/id choice-id :consequence fact}}}))}))
-                                                      (apply dom/ul nil
-                                                              (map (fn [{:keys [d/negated?] :as fact}]
-                                                                    (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
-                                                                                  :onClick
-                                                                                  (fn [_]
-                                                                                    (update-passage! id {:alter {:remove-consequence-from-choice {:d/id choice-id :consequence-id (:d/id fact)}}}))}
-                                                                            (title fact)))
-                                                                  (sort-by :d/id consequences))))))
-                                           (sort-by :d/id choices)))))))))
+                                            consequences)))
+                       (dom/div #js {:className "choices"}
+                                (dom/h3 nil "Choices")
+                                (new-choice-field (om/computed {} {:on-enter (fn [txt]
+                                                                               (update-passage! id {:alter {:add-choice (s/when-chose txt)}}))}))
+                                (apply dom/div nil
+                                       (map (fn [{:keys [d/description d/consequences] :as choice}]
+                                              (let [choice-id (:d/id choice)]
+                                                (dom/div #js {:className "choice"
+                                                              :onDragOver (fn [e] (.preventDefault e))
+                                                              :onDrop (fn [_]
+                                                                        (when dragging
+                                                                          (update-passage! id {:alter {:add-consequence-to-choice {:d/id choice-id :consequence dragging}}})))}
+                                                         (dom/h5 nil
+                                                                 (str description " ")
+                                                                 (dom/a #js {:className "delete"
+                                                                             :onClick (fn [e]
+                                                                                        (.preventDefault e)
+                                                                                        (when (.confirm js/window "Are you sure?")
+                                                                                          (update-passage! id {:alter {:remove-choice {:d/id choice-id}}})))}
+                                                                        "X"))
+                                                         (auto-completer (om/computed {} {:type (keyword (str (name choice-id) "-consequences"))
+                                                                                          :on-select (fn [fact]
+                                                                                                       (update-passage! id {:alter {:add-consequence-to-choice {:d/id choice-id :consequence fact}}}))}))
+                                                         (apply dom/ul nil
+                                                                (map (fn [{:keys [d/negated?] :as fact}]
+                                                                       (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
+                                                                                    :onClick
+                                                                                    (fn [_]
+                                                                                      (update-passage! id {:alter {:remove-consequence-from-choice {:d/id choice-id :consequence-id (:d/id fact)}}}))}
+                                                                               (title fact)))
+                                                                     (sort-by :d/id consequences))))))
+                                            (sort-by :d/id choices)))))))))
 
 (def editing-view (om/factory Editing))
 
@@ -389,7 +388,7 @@
                 new-passage (fn [p]
                               (om/transact! this `[(editor/new-passage {:passage ~p})]))
                 delete! (fn [id]
-                        (om/transact! this `[(editor/delete! {:id ~id})]))
+                          (om/transact! this `[(editor/delete! {:id ~id})]))
                 on-drag-start (fn [fact]
                                 (om/transact! this `[(editor/dragging {:fact ~fact})]))
                 update-passage! (fn [id props]
@@ -580,15 +579,6 @@
   init-data
 
 
- [{:d/passages [:d/id]} {:editing [{:d/passage [:d/id :d/text {:d/consequences
- [:d/id :d/negated? :d/description]} {:d/assumptions [:d/id :d/negated?
- :d/description]} {:d/choices [:d/key :d/description {:d/consequences [:d/id
- :d/negated? :d/description]}]}]} {:dragging [:d/id :d/negated?
- :d/description]}]} {:all-facts [:d/id :d/negated? :d/description]}]
-
-  (get-in norm-data [:passage/by-id :in-the-building :d/consequences])
-
-
   (:om.next/tables norm-data)
 
   (def parser (om/parser {:read read}))
@@ -606,6 +596,6 @@
   (parser {:state (atom norm-data)} '[{:d/current-passage [:d/text]}])
 
 
-  @reconciler
+  @reconciler)
 
-  )
+
