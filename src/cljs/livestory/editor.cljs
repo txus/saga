@@ -466,47 +466,44 @@
    (remove pred coll)
    (map update-fn (filter pred coll))))
 
+(defn add-fact [st passage-id ty fact]
+  (update-in st [:passage/by-id passage-id ty]
+             (fn [facts]
+               (let [new-fact (format-fact fact)]
+                 (-> facts
+                     set
+                     (disj (update new-fact :d/negated? not))
+                     (conj fact)
+                     vec)))))
+
+(defn remove-fact [st passage-id ty fact-id]
+  (update-in st [:passage/by-id passage-id ty]
+            (fn [facts]
+              (vec (remove (comp (partial = fact-id) :d/id) facts)))))
+
 (defmethod mutate 'editor/add-assumption
   [{:keys [state]} _ {:keys [passage-id fact]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/assumptions]
-            (fn [assumptions]
-              (let [fact (format-fact fact)]
-                (-> assumptions
-                    set
-                    (disj (update fact :d/negated? not))
-                    (conj fact)
-                    vec)))))})
+     (swap! state add-fact passage-id :d/assumptions fact))})
 
 (defmethod mutate 'editor/remove-assumption
   [{:keys [state]} _ {:keys [passage-id fact-id]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/assumptions]
-            (fn [assumptions]
-              (vec (remove (comp (partial = fact-id) :d/id) assumptions)))))})
+     (swap! state remove-fact passage-id :d/assumptions fact-id))})
 
 (defmethod mutate 'editor/add-consequence
   [{:keys [state]} _ {:keys [passage-id fact]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/consequences]
-            (fn [consequences]
-              (let [fact (format-fact fact)]
-                (-> consequences
-                    set
-                    (disj (update fact :d/negated? not))
-                    (conj fact)
-                    vec)))))})
+     (swap! state add-fact passage-id :d/consequences fact))})
 
 (defmethod mutate 'editor/remove-consequence
   [{:keys [state]} _ {:keys [passage-id fact-id]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/consequences]
-            (fn [consequences]
-              (vec (remove (comp (partial = fact-id) :d/id) consequences)))))})
+     (swap! state remove-fact passage-id :d/consequences fact-id))})
 
 (defmethod mutate 'editor/add-choice
   [{:keys [state]} _ {:keys [passage-id choice]}]
@@ -518,35 +515,31 @@
   [{:keys [state]} _ {:keys [passage-id choice-id]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/choices]
-            (fn [choices]
-              (vec (remove (comp (partial = choice-id) :d/id) choices)))))})
+     (swap! state remove-fact passage-id :d/choices choice-id))})
+
+(defn update-choice [st passage-id choice-id f]
+  (update-in st [:passage/by-id passage-id :d/choices]
+             (fn [choices]
+               (into []
+                     (update-when choices #(= (:d/id %) choice-id) f)))))
 
 (defmethod mutate 'editor/add-consequence-to-choice
   [{:keys [state]} _ {:keys [passage-id choice-id fact]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/choices]
-            (fn [choices]
-              (into []
-                    (update-when choices
-                                 #(= (:d/id %) choice-id)
-                                 (fn [choice]
-                                   (update choice :d/consequences (fn [conseqs]
-                                                                    (into [] (distinct) (conj conseqs fact))))))))))})
+     (swap! state update-choice passage-id choice-id
+            (fn [choice]
+              (update choice :d/consequences (fn [conseqs]
+                                               (into [] (distinct) (conj conseqs fact)))))))})
 
 (defmethod mutate 'editor/remove-consequence-from-choice
   [{:keys [state]} _ {:keys [passage-id choice-id fact-id]}]
   {:action
    (fn []
-     (swap! state update-in [:passage/by-id passage-id :d/choices]
-            (fn [choices]
-              (into []
-                    (update-when choices
-                                 #(= (:d/id %) choice-id)
-                                 (fn [choice]
-                                   (update choice :d/consequences (fn [conseqs]
-                                                                    (into [] (remove (comp (partial = fact-id) :d/id) conseqs))))))))))})
+     (swap! state update-choice passage-id choice-id
+            (fn [choice]
+              (update choice :d/consequences (fn [conseqs]
+                                               (into [] (remove (comp (partial = fact-id) :d/id) conseqs)))))))})
 
 (defmethod mutate 'editor/update-passage
   [{:keys [state]} _ {:keys [passage-id props]}]
