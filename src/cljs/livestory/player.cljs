@@ -2,6 +2,7 @@
   (:require [goog.dom :as gdom]
             [om.next :as om :refer-macros [defui]]
             [livestory.data :as d]
+            [livestory.persistence :as p]
             [livestory.engine :as e]
             [livestory.syntax :as s]
             [om.util :as u]
@@ -28,57 +29,65 @@
 
 (defmulti mutate om/dispatch)
 
+(js/console.log "STORY:" (pr-str (p/story-from-url)))
+
 (def init-data
-  {:d/facts #{}
-   :d/path [{:d/id :in-the-building}]
-   :d/passages
-   [(-> (s/passage :in-the-building
-                 "It was raining outside. The street was soaking wet.")
-        (s/entails (s/indeed "went out to the street"))
-        (s/choices
-         (s/when-chose "I went out without an umbrella"
-           (s/not "I have an umbrella"))
-         (s/when-chose "I took an umbrella"
-           (s/indeed "I have an umbrella"))))
+  (if-let [story (p/story-from-url)]
+    (do
+      (println "GOT STORY" (pr-str story))
+      {:d/facts #{}
+       :d/path [{:d/id (-> story :d/passages first :d/id)}]
+       :d/passages (-> story :d/passages)})
+    {:d/facts #{}
+     :d/path [{:d/id :in-the-building}]
+     :d/passages
+     [(-> (s/passage :in-the-building
+                     "It was raining outside. The street was soaking wet.")
+          (s/entails (s/indeed "went out to the street"))
+          (s/choices
+           (s/when-chose "I went out without an umbrella"
+             (s/not "I have an umbrella"))
+           (s/when-chose "I took an umbrella"
+             (s/indeed "I have an umbrella"))))
 
-    (-> (s/passage :crossing-the-street
-                   "I crossed the street and got in the library.")
-        (s/assumes (s/indeed "went out to the street"))
-        (s/entails (s/indeed "went into the library")))
+      (-> (s/passage :crossing-the-street
+                     "I crossed the street and got in the library.")
+          (s/assumes (s/indeed "went out to the street"))
+          (s/entails (s/indeed "went into the library")))
 
-    (-> (s/passage :in-the-library-without-umbrella
-                   "As I was entering, the security guards turned me away. I guess they didn't want their books ruined...")
-        (s/assumes (s/indeed "went into the library"))
-        (s/assumes (s/not "I have an umbrella"))
-        (s/entails (s/indeed "got rejected from the library")))
+      (-> (s/passage :in-the-library-without-umbrella
+                     "As I was entering, the security guards turned me away. I guess they didn't want their books ruined...")
+          (s/assumes (s/indeed "went into the library"))
+          (s/assumes (s/not "I have an umbrella"))
+          (s/entails (s/indeed "got rejected from the library")))
 
-    (-> (s/passage :in-the-library
-                   "As I was entering, the librarian greeted me: 'Hello John! Are you here to return the book? You've had it for a while.'")
-        (s/assumes (s/indeed "went into the library"))
-        (s/assumes (s/indeed "I have an umbrella"))
-        (s/entails (s/indeed "got prompted to return the book"))
-        (s/choices
-         (s/when-chose "I approached the counter and took the book out of my bag. He seemed happy."
-           (s/indeed "returned the book"))
-         (s/when-chose "I made up an excuse to keep the book a bit longer and told him I just wanted to browse."
-           (s/not "returned the book"))))
+      (-> (s/passage :in-the-library
+                     "As I was entering, the librarian greeted me: 'Hello John! Are you here to return the book? You've had it for a while.'")
+          (s/assumes (s/indeed "went into the library"))
+          (s/assumes (s/indeed "I have an umbrella"))
+          (s/entails (s/indeed "got prompted to return the book"))
+          (s/choices
+           (s/when-chose "I approached the counter and took the book out of my bag. He seemed happy."
+             (s/indeed "returned the book"))
+           (s/when-chose "I made up an excuse to keep the book a bit longer and told him I just wanted to browse."
+             (s/not "returned the book"))))
 
-    (-> (s/passage :browsing-without-returning-the-book
-                   "I spent a while browsing. As I was trying to reach onto the top shelf, my book came out of my bag. An old man looked at it with disapproval.")
-        (s/assumes (s/not "returned the book"))
-        (s/assumes (s/indeed "got prompted to return the book"))
-        (s/entails (s/indeed "old man disapproved me")))
+      (-> (s/passage :browsing-without-returning-the-book
+                     "I spent a while browsing. As I was trying to reach onto the top shelf, my book came out of my bag. An old man looked at it with disapproval.")
+          (s/assumes (s/not "returned the book"))
+          (s/assumes (s/indeed "got prompted to return the book"))
+          (s/entails (s/indeed "old man disapproved me")))
 
-    (-> (s/passage :browsing-having-returned-the-book
-                   "I spent a while browsing. I reached out for the second part of the series in a top shelf, found the gun inside and left.")
-        (s/assumes (s/indeed "returned the book"))
-        (s/assumes (s/indeed "got prompted to return the book"))
-        (s/entails (s/indeed "the end")))
+      (-> (s/passage :browsing-having-returned-the-book
+                     "I spent a while browsing. I reached out for the second part of the series in a top shelf, found the gun inside and left.")
+          (s/assumes (s/indeed "returned the book"))
+          (s/assumes (s/indeed "got prompted to return the book"))
+          (s/entails (s/indeed "the end")))
 
-    (-> (s/passage :browsing-without-returning-the-book-2
-                   "I tried to find an excuse he'd understand but the truth is I felt ashamed and left.")
-        (s/assumes (s/indeed "old man disapproved me"))
-        (s/entails (s/indeed "the end")))]})
+      (-> (s/passage :browsing-without-returning-the-book-2
+                     "I tried to find an excuse he'd understand but the truth is I felt ashamed and left.")
+          (s/assumes (s/indeed "old man disapproved me"))
+          (s/entails (s/indeed "the end")))]}))
 
 (defui Choices
   Object

@@ -1,8 +1,12 @@
 (ns livestory.ide
   (:require [goog.dom :as gdom]
+            [goog.crypt.base64 :as b64]
             [om.next :as om :refer-macros [defui]]
+            [cljs.reader :as r]
+            [livestory.upload :as upload]
             [livestory.syntax :as s]
             [livestory.data :as d]
+            [livestory.persistence :as persistence]
             [livestory.parser :as p :refer [read mutate]]
             [livestory.editor :as editor]
             [om.util :as u]
@@ -20,6 +24,16 @@
 (enable-console-print!)
 
 (declare reconciler)
+
+(defn get-story [story-id]
+  (let [raw-data @reconciler
+        story (get-in raw-data [:story/by-id story-id])
+        story (assoc story :d/passages (:d/passages
+                                        (om/db->tree
+                                         [{:d/passages (om/get-query editor/EditingPassage)}]
+                                         story
+                                         raw-data)))]
+    story))
 
 (def example-story
   {:editing
@@ -75,7 +89,7 @@
 
 (def init-data
   {:screen :main
-   :stories [{:story/id "story-1" :story/title "The first story" :d/passages (:d/passages example-story)}]
+   :stories [{:story/id "example-story" :story/title "Example story" :d/passages (:d/passages example-story)}]
    :editor nil
    :player nil})
 
@@ -126,6 +140,8 @@
                      (dom/h2 nil title)
                      (dom/ul #js {:className "story-actions"}
                              (dom/li #js {:key (str "play-" id)}  (dom/a #js {:onClick #(play-story! id)} "Play"))
+                             (dom/li #js {:key (str "download-" id)}  (dom/a #js {:download (str title ".edn") :href (persistence/story->download-url (get-story id)) :target "_blank"}
+                                                                                 "Download"))
                              (dom/li #js {:key (str "edit-" id)} (dom/a #js {:onClick #(edit-story! id)} "Edit"))
                              (dom/li #js {:key (str "delete-" id)}
                                      (dom/a #js {:onClick #(when (.confirm js/window "Are you sure?")
@@ -162,8 +178,10 @@
               :main
               (dom/div nil
                        (dom/h3 nil "Your stories")
+                       (upload/view (om/computed {} {:upload-fn (partial upload/upload-file this)}))
                        (story-list-view (om/computed {:stories stories}
                                                      {:play-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :player :id ~id})]))
+                                                      :download-story! (fn [id] (om/transact! this `[(routes/download {:id ~id})]))
                                                       :edit-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :editor :id ~id})]))
                                                       :delete-story! (fn [id] (om/transact! this `[(app/delete-story {:id ~id})]))})))
               :editor
@@ -179,6 +197,23 @@
                   :normalize true
                   :parser (om/parser {:read read :mutate mutate})}))
 
+(defmethod mutate 'story/upload
+  [{:keys [state] :as env} _ {:keys [story]}]
+  {:value {:keys [:stories]}
+   :action (fn []
+             (swap! state
+                    (fn [st]
+                      (let [{:keys [story/id]} story
+                            normalized (om/tree->db Story story true)
+                            story (dissoc normalized :fact/by-id :passage/by-id ::om/tables)
+                            new-st
+                            (-> st
+                                (update :fact/by-id merge (:fact/by-id normalized))
+                                (update :passage/by-id merge (:passage/by-id normalized))
+                                (update :stories conj [:story/by-id id])
+                                (assoc-in [:story/by-id id] story))]
+                        new-st))))})
+
 ;; Routes
 
 (defroute "/" []
@@ -189,6 +224,9 @@
 
 (defroute "/play/:id" [id]
   (om/transact! reconciler `[(routes/navigate {:screen :player :id ~id})]))
+
+(defroute "/download/:id" [id]
+  (om/transact! reconciler `[(routes/download {:id ~id})]))
 
 (defn ^:export foo []
   (keys @reconciler))
