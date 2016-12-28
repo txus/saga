@@ -2,6 +2,7 @@
   (:require [goog.dom :as gdom]
             [om.next :as om :refer-macros [defui]]
             [livestory.data :as d]
+            [livestory.parser :as p :refer [read mutate]]
             [livestory.syntax :as s]
             [om.util :as u]
             devtools.core
@@ -16,99 +17,40 @@
 (defn log [& xs]
   (js/console.log (apply str (interpose " - " (map pr-str xs)))))
 
-(defmulti read om/dispatch)
-
-(defn- all-facts [st]
-  (->> (:d/passages st)
-       (mapcat (fn [path]
-                 (let [{:keys [d/assumptions d/consequences d/choices]} (get-in st path)
+(defn all-facts [passages]
+  (log "ALL FACTS:" passages)
+  (println "ALL FACTS:" passages)
+  (->> passages
+       (mapcat (fn [passage]
+                 (let [{:keys [d/assumptions d/consequences d/choices]} passage
                        passage-facts (concat assumptions
                                              consequences
                                              (mapcat :d/consequences choices))]
                    passage-facts)))
        set))
 
-(defmethod read :all-facts
-  [{:keys [state query] :as env} k params]
-  (let [st @state]
-    {:value (all-facts st)}))
-
 (defmethod read :search/results
   [{:keys [state ast] :as env} k {:keys [query]}]
   (let [st @state]
     (if (empty? query)
       {:value #{}}
-      {:value (into #{} (filter (fn [{:keys [d/description] :as fact}]
-                                  (str/includes? (str/lower-case description)
-                                                 (str/lower-case query)))
-                                (all-facts st)))})))
-
-(defmethod read :default
-  [{:keys [state query] :as env} k params]
-  (let [st @state]
-    {:value (om/db->tree query (get st k) st)}))
-
-(defmulti mutate om/dispatch)
-
-(def init-data
-  {:editing
-   {:d/passage {:d/id :in-the-building}}
-   :d/passages
-   [(-> (s/passage :in-the-building
-                   "It was raining outside. The street was soaking wet.")
-        (s/entails (s/indeed "went out to the street"))
-        (s/choices
-         (s/when-chose "I went out without an umbrella"
-           (s/not "I have an umbrella"))
-         (s/when-chose "I took an umbrella"
-           (s/indeed "I have an umbrella"))))
-
-    (-> (s/passage :crossing-the-street
-                   "I crossed the street and got in the library.")
-        (s/assumes (s/indeed "went out to the street"))
-        (s/entails (s/indeed "went into the library")))
-
-    (-> (s/passage :in-the-library-without-umbrella
-                   "As I was entering, the security guards turned me away. I guess they didn't want their books ruined...")
-        (s/assumes (s/indeed "went into the library"))
-        (s/assumes (s/not "I have an umbrella"))
-        (s/entails (s/indeed "got rejected from the library")))
-
-    (-> (s/passage :in-the-library
-                   "As I was entering, the librarian greeted me: 'Hello John! Are you here to return the book? You've had it for a while.'")
-        (s/assumes (s/indeed "went into the library"))
-        (s/assumes (s/indeed "I have an umbrella"))
-        (s/entails (s/indeed "got prompted to return the book"))
-        (s/choices
-         (s/when-chose "I approached the counter and took the book out of my bag. He seemed happy."
-           (s/indeed "returned the book"))
-         (s/when-chose "I made up an excuse to keep the book a bit longer and told him I just wanted to browse."
-           (s/not "returned the book"))))
-
-    (-> (s/passage :browsing-without-returning-the-book
-                   "I spent a while browsing. As I was trying to reach onto the top shelf, my book came out of my bag. An old man looked at it with disapproval.")
-        (s/assumes (s/not "returned the book"))
-        (s/assumes (s/indeed "got prompted to return the book"))
-        (s/entails (s/indeed "old man disapproved me")))
-
-    (-> (s/passage :browsing-having-returned-the-book
-                   "I spent a while browsing. I reached out for the second part of the series in a top shelf, found the gun inside and left.")
-        (s/assumes (s/indeed "returned the book"))
-        (s/assumes (s/indeed "got prompted to return the book"))
-        (s/entails (s/indeed "the end")))
-
-    (-> (s/passage :browsing-without-returning-the-book-2
-                   "I tried to find an excuse he'd understand but the truth is I felt ashamed and left.")
-        (s/assumes (s/indeed "old man disapproved me"))
-        (s/entails (s/indeed "the end")))]})
+      {:value (into #{} (->> (-> st :editor :story :d/passages)
+                             (keep (partial get-in st))
+                             all-facts
+                             (filter (fn [{:keys [d/description]}]
+                                       (str/includes? (str/lower-case description)
+                                                      (str/lower-case query))))))})))
 
 (defn mk-title [{:keys [d/description d/negated?]}]
   (str description (when negated? " (not)")))
 
+(defn fact-id [{:keys [d/id d/negated?]}]
+  [id negated?])
+
 (defui Fact
   static om/Ident
-  (ident [this {:keys [d/id]}]
-         [:fact/by-id id])
+  (ident [this fact]
+         [:fact/by-id (fact-id fact)])
 
   static om/IQuery
   (query [this]
@@ -123,7 +65,7 @@
                          :onDragStart (fn [_] (on-drag-start (select-keys fact (om/get-query Fact))))}
                     (mk-title fact)))))
 
-(def fact-view (om/factory Fact {:keyfn (comp str (juxt :d/id :d/negated?))}))
+(def fact-view (om/factory Fact {:keyfn (juxt :d/id :d/negated?)}))
 
 (defui PassageLink
   static om/Ident
@@ -174,13 +116,13 @@
 (defui AllFacts
   Object
   (render [this]
-          (let [{:keys [all-facts]} (om/props this)
+          (let [{:keys [facts]} (om/props this)
                 computed (om/get-computed this)
-                all-facts (sort-by :d/description all-facts)]
+                facts (sort-by :d/description facts)]
             (dom/div nil
                      (dom/h3 nil "All facts")
                      (apply dom/ul #js {:id "all-facts"}
-                            (map #(fact-view (om/computed % computed)) all-facts))))))
+                            (map #(fact-view (om/computed % computed)) facts))))))
 
 (def all-facts-view (om/factory AllFacts))
 
@@ -210,7 +152,8 @@
                :className "result-list"
                :id (str type "-result-list")}
           (map #(let [{:keys [d/description d/id] :as fact} %]
-                  (dom/li #js {:onClick (fn [_]
+                  (dom/li #js {:key (str "result-" (fact-id fact))
+                               :onClick (fn [_]
                                           (om/set-query! ac {:params {:query ""}})
                                           (on-select fact))}
                           (mk-title fact)))
@@ -304,11 +247,20 @@
                                    (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
                                                 :onClick
                                                 (fn [_]
-                                                  (remove! (:d/id fact)))}
+                                                  (remove! (fact-id fact)))}
                                            (mk-title fact)))
                                  facts))))))
 
 (def facts-list (om/factory FactsList))
+
+(defui CurrentStory
+  static om/Ident
+  (ident [this {:keys [story/id]}]
+         [:story/by-id id])
+  static om/IQuery
+  (query [this]
+         (let [passages-query (om/get-query EditingPassage)]
+           `[:story/id :story/title {:d/passages ~passages-query} {:story/facts ~(om/get-query Fact)}])))
 
 (defui Editing
   static om/IQuery
@@ -374,16 +326,15 @@
 (defui Editor
   static om/IQuery
   (query [this]
-         (let [subquery (om/get-query PassageLink)
-               editing-subquery (om/get-query Editing)
-               fact-subquery (om/get-query Fact)]
-           `[{:d/passages ~subquery}
-             {:editing ~editing-subquery}
-             {:all-facts ~fact-subquery}]))
+         `[{:editing ~(om/get-query Editing)}
+           {:story ~(om/get-query CurrentStory)}])
 
   Object
   (render [this]
-          (let [{:keys [editing all-facts] :as props} (om/props this)
+          (let [{:keys [editing story] :as props} (om/props this)
+                facts (all-facts (:d/passages story))
+                _ (log facts)
+                _ (println (pr-str facts))
                 edit! (fn [id]
                         (om/transact! this `[(editor/edit! {:id ~id})]))
                 new-passage (fn [p]
@@ -395,27 +346,19 @@
                 transact! (partial om/transact! this)]
             (dom/div nil
                      (dom/div #js {:id "left-sidebar" :className "sidebar"}
-                              (passage-links-view (om/computed props
+                              (passage-links-view (om/computed story
                                                                {:edit! edit!
-                                                                 :new-passage new-passage
-                                                                 :delete! delete!})))
+                                                                :new-passage new-passage
+                                                                :delete! delete!})))
                      (dom/div #js {:id "editing"}
                               (editing-view (om/computed editing
                                                          {:transact! transact!
-                                                          :all-facts all-facts})))
+                                                          :all-facts facts})))
                      (dom/div #js {:id "right-sidebar" :className "sidebar"}
-                              (all-facts-view (om/computed props
-                                                               {:on-drag-start on-drag-start})))))))
+                              (all-facts-view (om/computed {:facts facts}
+                                                           {:on-drag-start on-drag-start})))))))
 
-(def reconciler
-  (om/reconciler {:state init-data
-                  :normalize true
-                  :parser (om/parser {:read read :mutate mutate})}))
-
-(defn init []
-  (om/add-root! reconciler
-                Editor
-                (gdom/getElement "container")))
+(def view (om/factory Editor))
 
 (defmethod mutate 'editor/edit!
   [{:keys [state]} _ {:keys [id]}]
@@ -423,9 +366,10 @@
    (fn []
      (swap! state
             (fn [st]
-              (when (-> st :passage/by-id (get id))
-                (assoc-in st [:editing :d/passage]
-                          [:passage/by-id id])))))})
+              (if (-> st :passage/by-id (get id))
+                (assoc-in st [:editor :editing :d/passage]
+                          [:passage/by-id id])
+                st))))})
 
 (defmethod mutate 'editor/new-passage
   [{:keys [state]} _ {:keys [passage]}]
@@ -433,11 +377,13 @@
    (fn []
      (swap! state
             (fn [st]
-              (let [id (:d/id passage)]
+              (let [id (:d/id passage)
+                    story-id (-> st :editor :story :story/id)]
                 (-> st
-                    (update :d/passages conj passage)
                     (update :passage/by-id assoc id passage)
-                    (assoc-in [:editing :d/passage] [:passage/by-id id]))))))})
+                    (update-in [:story/by-id story-id :d/passages] conj [:passage/by-id id])
+                    (update-in [:editor :story :d/passages] conj [:passage/by-id id])
+                    (assoc-in [:editor :editing :d/passage] [:passage/by-id id]))))))})
 
 (defmethod mutate 'editor/delete!
   [{:keys [state]} _ {:keys [id]}]
@@ -445,11 +391,15 @@
    (fn []
      (swap! state
             (fn [st]
-              (let [st (if (= id (-> st :editing :d/passage second))
-                         (update st :editing dissoc :d/passage)
-                         st)]
-                (update st :d/passages (fn [passages]
-                                         (vec (remove (fn [[_ pid]] (= id pid)) passages))))))))})
+              (let [st (if (= id (-> st :editor :editing :d/passage second))
+                         (update-in st [:editor :editing] dissoc :d/passage)
+                         st)
+                    story-id (-> st :editor :story :story/id)
+                    remove-passage (fn [passages]
+                                     (vec (remove (fn [[_ pid]] (= id pid)) passages)))]
+                (-> st
+                    (update-in [:story/by-id story-id :d/passages] remove-passage)
+                    (update-in [:editor :story :d/passages] remove-passage))))))})
 
 (defmethod mutate 'editor/dragging
   [{:keys [state]} _ {:keys [fact]}]
@@ -457,7 +407,7 @@
    (fn []
      (swap! state
             (fn [st]
-              (assoc-in st [:editing :dragging] fact))))})
+              (assoc-in st [:editor :editing :dragging] fact))))})
 
 (defn format-fact [fact]
   (select-keys fact (om/get-query Fact)))
@@ -467,20 +417,33 @@
    (remove pred coll)
    (map update-fn (filter pred coll))))
 
+(defn add-fact* [new-fact-id facts]
+  (-> facts
+      set
+      (disj [:fact/by-id (update new-fact-id 1 not)])
+      (conj [:fact/by-id new-fact-id])
+      vec))
+
 (defn add-fact [st passage-id ty fact]
-  (update-in st [:passage/by-id passage-id ty]
-             (fn [facts]
-               (let [new-fact (format-fact fact)]
-                 (-> facts
-                     set
-                     (disj (update new-fact :d/negated? not))
-                     (conj fact)
-                     vec)))))
+  (let [new-fact (format-fact fact)
+        new-fact-id (fact-id new-fact)]
+    (println (keys (:fact/by-id st)))
+    (-> st
+        (assoc-in [:fact/by-id new-fact-id] new-fact)
+        (update-in [:passage/by-id passage-id ty]
+                   (partial add-fact* new-fact-id)))))
 
 (defn remove-fact [st passage-id ty fact-id]
-  (update-in st [:passage/by-id passage-id ty]
-            (fn [facts]
-              (vec (remove (comp (partial = fact-id) :d/id) facts)))))
+  (-> st
+      (update :fact/by-id dissoc fact-id)
+      (update-in [:passage/by-id passage-id ty]
+                 (fn [facts]
+                   (vec (remove (comp (partial = fact-id) second) facts))))))
+
+(defn remove-choice [st passage-id choice-id]
+  (update-in st [:passage/by-id passage-id :d/choices]
+             (fn [choices]
+               (vec (remove (comp (partial = choice-id) :d/id) choices)))))
 
 (defmethod mutate 'editor/add-assumption
   [{:keys [state]} _ {:keys [passage-id fact]}]
@@ -516,7 +479,7 @@
   [{:keys [state]} _ {:keys [passage-id choice-id]}]
   {:action
    (fn []
-     (swap! state remove-fact passage-id :d/choices choice-id))})
+     (swap! state remove-choice passage-id choice-id))})
 
 (defn update-choice [st passage-id choice-id f]
   (update-in st [:passage/by-id passage-id :d/choices]
@@ -528,22 +491,26 @@
   [{:keys [state]} _ {:keys [passage-id choice-id fact]}]
   {:action
    (fn []
-     (swap! state update-choice passage-id choice-id
-            (fn [choice]
-              (update choice :d/consequences (fn [conseqs]
-                                               (into [] (distinct) (conj conseqs fact)))))))})
+     (swap! state
+            (fn [st]
+              (-> st
+                  (assoc-in [:fact/by-id (fact-id fact)] (format-fact fact))
+                  (update-choice passage-id choice-id
+                                 (fn [choice]
+                                   (update choice :d/consequences
+                                           (partial add-fact* (fact-id fact)))))))))})
 
 (defmethod mutate 'editor/remove-consequence-from-choice
-  [{:keys [state]} _ {:keys [passage-id choice-id fact-id]}]
+  [{:keys [state] :as env} _ {:keys [passage-id choice-id fact-id]}]
   {:action
    (fn []
      (swap! state update-choice passage-id choice-id
             (fn [choice]
               (update choice :d/consequences (fn [conseqs]
-                                               (into [] (remove (comp (partial = fact-id) :d/id) conseqs)))))))})
+                                               (into [] (remove (comp (partial = fact-id) second) conseqs)))))))})
 
 (defmethod mutate 'editor/update-passage
-  [{:keys [state]} _ {:keys [passage-id props]}]
+  [{:keys [state] :as env} _ {:keys [passage-id props]}]
   {:action
    (fn []
      (swap! state
@@ -551,43 +518,13 @@
               (update-in st [:passage/by-id passage-id]
                          #(merge % props)))))})
 
-(defn save-story! [name passages])
+;; (defn save-story! [name passages])
 
-(defn current-passages []
-  (let [raw-data @reconciler
-        passages (:d/passages
-                  (om/db->tree
-                   [{:d/passages (om/get-query EditingPassage)}]
-                   raw-data
-                   raw-data))]
-    passages))
-
-(comment
-
-
-  (require '[cljs.pprint :as pp])
-
-  (def norm-data (om/tree->db Editor init-data true))
-  init-data
-
-
-  (:om.next/tables norm-data)
-
-  (def parser (om/parser {:read read}))
-
-  (om/get-query Editor)
-
-
-  norm-data
-
-  (u/ident? (-> norm-data :d/current-passage))
-
-  (-> norm-data :passage/by-id (get (uuid "in-the-building")))
-
-
-  (parser {:state (atom norm-data)} '[{:d/current-passage [:d/text]}])
-
-
-  @reconciler)
-
-
+;; (defn current-passages []
+;;   (let [raw-data @reconciler
+;;         passages (:d/passages
+;;                   (om/db->tree
+;;                    [{:d/passages (om/get-query EditingPassage)}]
+;;                    raw-data
+;;                    raw-data))]
+;;     passages))

@@ -1,0 +1,4 @@
+{:require  [livestory.ide]
+ :init-fns [livestory.ide/init]
+ :compiler-options {:asset-path "js/ide.out"
+                    :preloads [dirac.runtime.preload]}}

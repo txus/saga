@@ -1,3 +1,0 @@
-{:require  [livestory.editor]
- :init-fns [livestory.editor/init]
- :compiler-options {:asset-path "js/editor.out"}}
