@@ -19,8 +19,8 @@
 (s/def ::assumptions (s/coll-of ::fact :kind set?))
 (s/def ::consequences (s/coll-of ::fact :kind set?))
 
-(s/def ::choices (s/map-of (s/tuple ::key ::description)
-                           ::consequences))
+(s/def ::choice (s/keys :req [::id ::description ::consequences]))
+(s/def ::choices (s/coll-of ::choice))
 
 (s/def ::key uuid?)
 (s/def ::text string?)

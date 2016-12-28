@@ -25,6 +25,7 @@
       {:value (get-in st (k st))}
       {:value (om/db->tree query (k st) st)})))
 
+
 (defmulti mutate om/dispatch)
 
 (def init-data
@@ -87,10 +88,10 @@
             (dom/ul
              #js {:className "choices"}
              (map
-              (fn [[k [d _]]]
-                (dom/li #js {:key k}
+              (fn [{:keys [d/id d/description]}]
+                (dom/li #js {:key id}
                         (dom/button #js {:className "choice"
-                                         :onClick (fn [_] (choose! k))} d)))
+                                         :onClick (fn [_] (choose! id))} description)))
               choices)))))
 
 (def choices-view (om/factory Choices))

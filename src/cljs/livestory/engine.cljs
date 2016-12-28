@@ -21,14 +21,17 @@
     (catch js/Error e
       (js/alert (pr-str e)))))
 
+(defn- find-choice [choices choice-id]
+  (first (filter (comp (partial = choice-id) :d/id) choices)))
+
 (defn next
   ([world] (next world nil))
-  ([{:keys [d/passages d/facts d/path] :as world} choice?]
+  ([{:keys [d/passages d/facts d/path] :as world} choice-id?]
    (let [current (last path)
-         facts (set/union facts (:d/consequences current))
-         new-facts (if-not choice?
+         facts (set/union (set facts) (set (:d/consequences current)))
+         new-facts (if-not choice-id?
                      facts
-                     (reconcile facts (-> current :d/choices (get choice?) last)))
+                     (reconcile facts (-> current :d/choices (find-choice choice-id?) :d/consequences set)))
          possible-passages (filter
                             (fn [{:keys [d/assumptions d/id] :as passage}]
                               (and (apply not= (map :d/id [current passage]))
@@ -45,7 +48,7 @@
                                            butlast
                                            vec
                                            (conj
-                                            (cond-> (last path) choice? (assoc :d/chose choice?))
+                                            (cond-> (last path) choice-id? (assoc :d/chose choice-id?))
                                             next-passage)))]
          (if (empty? (:d/choices next-passage))
            (next next-world)
