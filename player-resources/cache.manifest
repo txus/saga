@@ -1,4 +1,9 @@
 CACHE MANIFEST
+
+CACHE:
 js/player.js
 css/player.css
 css/fonts.css
+
+NETWORK:
+*

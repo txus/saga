@@ -1,4 +1,9 @@
 CACHE MANIFEST
+
+CACHE:
 js/ide.js
 css/ide.css
 css/fonts.css
+
+NETWORK:
+*

@@ -57,7 +57,7 @@
   identity)
 
 (deftask player-development []
-  (set-env! :resource-paths #(conj % "dev-resources"))
+  (set-env! :resource-paths #(into % "dev-resources" "player-resources"))
   (task-options! reload {:on-jsload 'saga.player/init}
                  cljs {:optimizations :none
                        :compiler-options
@@ -69,8 +69,8 @@
                         :cache-analysis true}})
   identity)
 
-(deftask editor-development []
-  (set-env! :resource-paths #(conj % "dev-resources"))
+(deftask ide-development []
+  (set-env! :resource-paths #(into % #{"dev-resources" "ide-resources"}))
   (task-options! cljs {:optimizations :none
                        :compiler-options
                        {:source-map true
@@ -101,9 +101,9 @@
   (comp (player-development)
      (run)))
 
-(deftask editor-dev
+(deftask ide-dev
   []
-  (comp (editor-development)
+  (comp (ide-development)
      (run)))
 
 (deftask testing []
