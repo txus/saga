@@ -58,7 +58,7 @@
 
 (deftask player-development []
   (set-env! :resource-paths #(conj % "dev-resources"))
-  (task-options! reload {:on-jsload 'livestory.player/init}
+  (task-options! reload {:on-jsload 'saga.player/init}
                  cljs {:optimizations :none
                        :compiler-options
                        {:asset-path "js/player.out"
@@ -79,7 +79,7 @@
                         :preloads '[dirac.runtime.preload]
                         :parallel-build true
                         :cache-analysis true}}
-                 reload {:on-jsload 'livestory.ide/init})
+                 reload {:on-jsload 'saga.ide/init})
   identity)
 
 (deftask package [t build-target VAL str "The target to build. Can be 'ide' or 'player'"]

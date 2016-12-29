@@ -1,4 +1,4 @@
-(ns livestory.persistence
+(ns saga.persistence
   (:require [goog.crypt.base64 :as b64]
             [cemerick.url :as url]
             [cljs.reader :as r]))

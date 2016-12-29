@@ -1,4 +1,4 @@
-(ns livestory.parser
+(ns saga.parser
   (:require [om.next :as om]))
 
 (defmulti read om/dispatch)

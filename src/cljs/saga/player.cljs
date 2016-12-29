@@ -1,12 +1,12 @@
-(ns livestory.player
+(ns saga.player
   (:require [goog.dom :as gdom]
             [om.next :as om :refer-macros [defui]]
-            [livestory.data :as d]
-            [livestory.persistence :as p]
-            [livestory.engine :as e]
-            [livestory.upload :as upload]
-            [livestory.persistence :as persistence]
-            [livestory.syntax :as s]
+            [saga.data :as d]
+            [saga.persistence :as p]
+            [saga.engine :as e]
+            [saga.upload :as upload]
+            [saga.persistence :as persistence]
+            [saga.syntax :as s]
             [om.util :as u]
             devtools.core
             [om.dom :as dom]

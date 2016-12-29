@@ -1,9 +1,9 @@
-(ns livestory.upload
+(ns saga.upload
   (:require [clojure.string :as str]
             [clojure.reader :as r]
             [om.dom :as dom]
             [om.next :as om :refer-macros [defui]]
-            [livestory.parser :as parser :refer [mutate]]))
+            [saga.parser :as parser :refer [mutate]]))
 
 (defn handle-story-file [this result]
   (let [story (r/read-string result)]

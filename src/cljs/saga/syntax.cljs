@@ -1,5 +1,5 @@
-(ns livestory.syntax
-  (:require [livestory.data :as d]
+(ns saga.syntax
+  (:require [saga.data :as d]
             [clojure.string :as str]
             [cuerdas.core :as c])
   (:refer-clojure :exclude [not]))

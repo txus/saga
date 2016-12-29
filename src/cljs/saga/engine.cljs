@@ -1,8 +1,8 @@
-(ns livestory.engine
+(ns saga.engine
   (:require [clojure.set :as set]
             [clojure.spec.impl.gen :as gen]
             [clojure.spec :as s]
-            [livestory.data :as d])
+            [saga.data :as d])
   (:refer-clojure :exclude [next]))
 
 (defn log [& xs]

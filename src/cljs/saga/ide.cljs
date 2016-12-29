@@ -1,14 +1,14 @@
-(ns livestory.ide
+(ns saga.ide
   (:require [goog.dom :as gdom]
             [goog.crypt.base64 :as b64]
             [om.next :as om :refer-macros [defui]]
             [cljs.reader :as r]
-            [livestory.upload :as upload]
-            [livestory.syntax :as s]
-            [livestory.data :as d]
-            [livestory.persistence :as persistence]
-            [livestory.parser :as p :refer [read mutate]]
-            [livestory.editor :as editor]
+            [saga.upload :as upload]
+            [saga.syntax :as s]
+            [saga.data :as d]
+            [saga.persistence :as persistence]
+            [saga.parser :as p :refer [read mutate]]
+            [saga.editor :as editor]
             [om.util :as u]
             devtools.core
             [secretary.core :as secretary :refer-macros [defroute]]

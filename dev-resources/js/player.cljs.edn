@@ -1,3 +1,3 @@
-{:require  [livestory.player]
- :init-fns [livestory.player/init]
+{:require  [saga.player]
+ :init-fns [saga.player/init]
  :compiler-options {}}
