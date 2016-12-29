@@ -31,12 +31,14 @@ to come.
 
 ## Building
 
-To build the IDE to `target-ide/`:
+You'll need [Boot](http://boot-clj.com) (`brew install boot-clj`).
+
+To build the IDE:
 
     boot package -t ide
     open target-ide/ide.html
     
-To build the player to `target-player/`:
+To build the player:
 
     boot package -t player
     open target-player/player.html
