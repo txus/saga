@@ -54,6 +54,12 @@ To work on the player:
     boot player-dev
     open localhost:3000/player.html
 
+## Tests
+
+There are currently no automated tests. To run them anyway:
+
+    boot test
+    
 ## Roadmap
 
 * [x] Basic IDE working
@@ -65,6 +71,7 @@ To work on the player:
 * [ ] Modeling probabilistic events (right now a choice between N potential next passages is random)
 * [ ] Debugging a passage by running it with a canned bag of facts
 * [ ] Debugging-enabled player within the IDE (manipulating facts, etc)
+* [ ] Tests!!!
 * [ ] Sass Styles
 * [ ] Package Player as a React Native app
 * [ ] Write about Saga's design decisions
