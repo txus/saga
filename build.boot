@@ -1,6 +1,6 @@
 (set-env!
  :source-paths    #{"sass" "src/cljs"}
- :resource-paths  #{"resources"}
+ :resource-paths #{"common-resources"}
  :dependencies '[[adzerk/boot-cljs          "1.7.228-2"  :scope "test"]
                  [adzerk/boot-cljs-repl     "0.3.3"      :scope "test"]
                  [adzerk/boot-reload        "0.4.13"     :scope "test"]
@@ -49,19 +49,52 @@
         (build)))
 
 (deftask production []
-  (task-options! cljs {:optimizations :advanced}
-                 sass   {:output-style :compressed})
+  (set-env! :resource-paths #(conj % "resources"))
+  (task-options!
+   cljs {:optimizations :advanced
+         :compiler-options {:parallel-build true
+                            :compiler-stats true
+                            :pretty-print false}}
+   sass {:output-style :compressed})
   identity)
 
 (deftask development []
-  (task-options! cljs {:optimizations :none :source-map true}
-                 reload {:on-jsload 'livestory.player/init})
+  (set-env! :resource-paths #(conj % "dev-resources"))
+  (task-options! reload {:on-jsload 'livestory.player/init}
+                 cljs {:optimizations :none
+                       :compiler-options
+                       {:asset-path "js/player.out"
+                        :source-map true
+                        :source-map-timestamp true
+                        :preloads '[dirac.runtime.preload]
+                        :parallel-build true
+                        :cache-analysis true}})
   identity)
 
 (deftask editor-development []
-  (task-options! cljs {:optimizations :none :source-map true}
+  (set-env! :resource-paths #(conj % "dev-resources"))
+  (task-options! cljs {:optimizations :none
+                       :compiler-options
+                       {:source-map true
+                        :asset-path "js/ide.out"
+                        :source-map-timestamp true
+                        :preloads '[dirac.runtime.preload]
+                        :parallel-build true
+                        :cache-analysis true}}
                  reload {:on-jsload 'livestory.ide/init})
   identity)
+
+(require '[clojure.java.io :as io]
+         '[boot.core :as c]
+         '[boot.file :as f])
+
+(deftask package [t build-target VAL str "The target to build. Can be :ide or :player"]
+  (comp
+   (production)
+   (cljs :ids #{(str "js/" build-target)})
+   (sass)
+   (sift :include #{#".*\.out" #".*\.edn"} :invert true)
+   (target)))
 
 (deftask dev
   "Simple alias to run application in development mode"

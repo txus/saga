@@ -23,13 +23,10 @@
     (r/read-string app-state-str)))
 
 (defn save-state [state]
-  (println "saving" (pr-str state))
   (set-item! "app-state" (pr-str state)))
 
 (defn clear-state []
   (remove-item! "app-state"))
-
-#_(clear-state)
 
 (defn story->download-url [story]
   (let [encoded (url/url-encode (pr-str story))]
