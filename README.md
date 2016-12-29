@@ -1,5 +1,7 @@
 # Saga
 
+[![Travis](https://img.shields.io/travis/txus/saga.svg?style=flat-square)](https://travis-ci.org/txus/saga)
+
 Saga is an experimental programming language for interactive fiction. Think
 "choose your own adventure" but with the dynamism of a Turing machine.
 
