@@ -1,6 +1,5 @@
 (set-env!
  :source-paths    #{"sass" "src/cljs"}
- :resource-paths #{"common-resources"}
  :dependencies '[[adzerk/boot-cljs          "1.7.228-2"  :scope "test"]
                  [adzerk/boot-cljs-repl     "0.3.3"      :scope "test"]
                  [adzerk/boot-reload        "0.4.13"     :scope "test"]
@@ -49,7 +48,6 @@
         (build)))
 
 (deftask production []
-  (set-env! :resource-paths #(conj % "resources"))
   (task-options!
    cljs {:optimizations :advanced
          :compiler-options {:parallel-build true
@@ -58,7 +56,7 @@
    sass {:output-style :compressed})
   identity)
 
-(deftask development []
+(deftask player-development []
   (set-env! :resource-paths #(conj % "dev-resources"))
   (task-options! reload {:on-jsload 'livestory.player/init}
                  cljs {:optimizations :none
@@ -84,22 +82,23 @@
                  reload {:on-jsload 'livestory.ide/init})
   identity)
 
-(require '[clojure.java.io :as io]
-         '[boot.core :as c]
-         '[boot.file :as f])
-
-(deftask package [t build-target VAL str "The target to build. Can be :ide or :player"]
+(deftask package [t build-target VAL str "The target to build. Can be 'ide' or 'player'"]
+  (set-env! :resource-paths #(conj % (str build-target "-resources")))
   (comp
    (production)
    (cljs :ids #{(str "js/" build-target)})
    (sass)
-   (sift :include #{#".*\.out" #".*\.edn"} :invert true)
-   (target)))
+   (sift :include #{#"cache\.manifest"
+                    #"css\/fonts\.css"
+                    (re-pattern (str build-target "\\.html"))
+                    (re-pattern (str "css/" build-target "\\.css"))
+                    (re-pattern (str "js/" build-target "\\.js"))})
+   (target :dir #{(str "target-" build-target)})))
 
-(deftask dev
+(deftask player-dev
   "Simple alias to run application in development mode"
   []
-  (comp (development)
+  (comp (player-development)
      (run)))
 
 (deftask editor-dev

@@ -18,15 +18,15 @@
   [key]
   (.removeItem (.-localStorage js/window) key))
 
-(defn get-state []
-  (when-let [app-state-str (get-item "app-state")]
+(defn get-state [key]
+  (when-let [app-state-str (get-item key)]
     (r/read-string app-state-str)))
 
-(defn save-state [state]
-  (set-item! "app-state" (pr-str state)))
+(defn save-state [key state]
+  (set-item! key (pr-str state)))
 
-(defn clear-state []
-  (remove-item! "app-state"))
+(defn clear-state [key]
+  (remove-item! key))
 
 (defn story->download-url [story]
   (let [encoded (url/url-encode (pr-str story))]

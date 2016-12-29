@@ -192,7 +192,7 @@
               (dom/div nil "Oops, you're lost!")))))
 
 (def reconciler
-  (om/reconciler {:state (or (persistence/get-state) init-data)
+  (om/reconciler {:state (or (persistence/get-state "ide") init-data)
                   :normalize true
                   :parser (om/parser {:read read :mutate mutate})}))
 
@@ -201,7 +201,7 @@
   {:action (fn []
              (let [st @state
                    denormalized (om/db->tree (om/get-query App) st st)]
-               (persistence/save-state denormalized)))})
+               (persistence/save-state "ide" denormalized)))})
 
 (defmethod mutate 'story/upload
   [{:keys [state] :as env} _ {:keys [story]}]

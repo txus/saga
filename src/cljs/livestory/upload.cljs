@@ -22,9 +22,12 @@
 (defui UploadFormView
   Object
   (render [this]
-          (let [{:keys [upload-fn]} (om/get-computed this)]
+          (let [{:keys [title]
+                 :or {title "Upload story:"}}
+                (om/props this)
+                {:keys [upload-fn]} (om/get-computed this)]
             (dom/div #js {:id "upload"}
-                     (dom/label #js {:name "csv"} "Upload story:")
+                     (dom/label #js {:name "csv"} title)
                      (dom/input #js {:type "file" :id "story-upload" :name "story" :accept ".edn"
                                      :onChange (fn [e]
                                                  (let [file (aget (.. e -target -files) 0)
