@@ -42,7 +42,7 @@ To build the player to `target-player/`:
 ## Developing
 
 This project is built entirely in ClojureScript. The IDE and the Player are both
-separate Om Next apps.
+separate Om Next apps. You'll need [Boot](http://boot-clj.com) (`brew install boot-clj`).
 
 To work on the IDE:
 
@@ -67,3 +67,4 @@ To work on the player:
 * [ ] Debugging-enabled player within the IDE (manipulating facts, etc)
 * [ ] Sass Styles
 * [ ] Package Player as a React Native app
+* [ ] Write about Saga's design decisions
