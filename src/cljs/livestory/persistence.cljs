@@ -3,6 +3,34 @@
             [cemerick.url :as url]
             [cljs.reader :as r]))
 
+(defn set-item!
+  "Set `key' in browser's localStorage to `val`."
+  [key val]
+  (.setItem (.-localStorage js/window) key val))
+
+(defn get-item
+  "Returns value of `key' from browser's localStorage."
+  [key]
+  (.getItem (.-localStorage js/window) key))
+
+(defn remove-item!
+  "Remove the browser's localStorage value for the given `key`"
+  [key]
+  (.removeItem (.-localStorage js/window) key))
+
+(defn get-state []
+  (when-let [app-state-str (get-item "app-state")]
+    (r/read-string app-state-str)))
+
+(defn save-state [state]
+  (println "saving" (pr-str state))
+  (set-item! "app-state" (pr-str state)))
+
+(defn clear-state []
+  (remove-item! "app-state"))
+
+#_(clear-state)
+
 (defn story->download-url [story]
   (let [encoded (url/url-encode (pr-str story))]
     (str "data:application/edn;charset=utf-8," encoded)))

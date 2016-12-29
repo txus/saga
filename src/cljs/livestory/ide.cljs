@@ -93,7 +93,6 @@
    :editor nil
    :player nil})
 
-
 (defmethod mutate 'routes/navigate
   [{:keys [state]} _ {:keys [screen id]}]
   {:action
@@ -193,9 +192,16 @@
               (dom/div nil "Oops, you're lost!")))))
 
 (def reconciler
-  (om/reconciler {:state init-data
+  (om/reconciler {:state (or (persistence/get-state) init-data)
                   :normalize true
                   :parser (om/parser {:read read :mutate mutate})}))
+
+(defmethod mutate 'app/save-state
+  [{:keys [state] :as env} _ _]
+  {:action (fn []
+             (let [st @state
+                   denormalized (om/db->tree (om/get-query App) st st)]
+               (persistence/save-state denormalized)))})
 
 (defmethod mutate 'story/upload
   [{:keys [state] :as env} _ {:keys [story]}]
@@ -228,10 +234,10 @@
 (defroute "/download/:id" [id]
   (om/transact! reconciler `[(routes/download {:id ~id})]))
 
-(defn ^:export foo []
-  (keys @reconciler))
-
 (defn init []
+  (js/setInterval
+   #(om/transact! reconciler `[(app/save-state)])
+   5000)
   (om/add-root! reconciler
                 App
                 (gdom/getElement "container")))
