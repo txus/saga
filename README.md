@@ -76,4 +76,5 @@ There are currently no automated tests. To run them anyway:
 * [ ] Tests!!!
 * [ ] Sass Styles
 * [ ] Package Player as a React Native app
+* [ ] Set up Github releases with Travis CI artifacts
 * [ ] Write about Saga's design decisions
