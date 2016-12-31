@@ -29,6 +29,8 @@ The interpreter used by the player lives in the `saga.engine` namespace.
 Saga programs (stories) are exported and imported as EDN files. More about this
 to come.
 
+![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE")
+
 ## Building
 
 You'll need [Boot](http://boot-clj.com) (`brew install boot-clj`).
