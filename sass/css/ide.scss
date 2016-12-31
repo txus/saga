@@ -1,6 +1,47 @@
 $font-stack:    PT Serif, Helvetica, sans-serif;
 $primary-color: #333;
 
+.story-card {
+    position: relative;
+}
+
+.story-actions {
+    position: relative;
+    display: flex;
+    bottom: -55px;
+}
+
+.file-input {
+    display: inline;
+}
+
+.ide-actions {
+    padding: 10px;
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: row;
+
+    .ide-action {
+        margin-right: 15px;
+    }
+}
+
+.edit-passage-link {
+    cursor: pointer;
+
+    height: 40px;
+}
+
+.passage-link {
+    &:hover {
+        background: #DDF;
+    }
+}
+
+#story-upload {
+    display: none;
+}
+
 body {
     font: 100% $font-stack;
     color: $primary-color;
@@ -33,47 +74,35 @@ a.delete {
     }
 }
 
+.passage-link.selected {
+    background: #DDF;
+}
+
+.passage-links-sidebar header{
+    margin-right: 15px;
+    display: inline;
+}
 
 .sidebar {
-    width: 25%;
-    padding: 0;
-    font-size: 13px;
-
-    h3 {
+    header {
+        padding-left: 20px;
+        display: flex;
+        align-items: center;
+        flex-direction: row;
+        h5 {
+            margin-right: 20px;
+        }
+        button {
+            margin: 0;
+        }
         font-size: 15px;
         text-transform: uppercase;
         text-align: center;
     }
+}
 
-    ul {
-        padding: 0;
-        margin: 0;
-        list-style: none;
-
-        li {
-            cursor: pointer;
-            padding: 15px;
-            width: 80%;
-            position: relative;
-
-            &:hover {
-                background-color: #DDD;
-            }
-
-            a.delete {
-                margin-top: -23px;
-            }
-
-            a.edit {
-                height: 100%;
-                width: 80%;
-                display: block;
-            }
-
-        }
-
-
-    }
+.sidebar .fact {
+    cursor: pointer;
 }
 
 .fact {
@@ -86,44 +115,32 @@ a.delete {
     }
 }
 
-#left-sidebar {
-    float: left;
-    border-right: 1px solid #DDD;
-}
-
-#right-sidebar {
-    float: left;
-    width: 20%;
-    border-left: 1px solid #DDD;
-}
-
-#editing {
-    float:left;
-    padding: 15px;
-    width: 50%;
-    margin-right: 10px;
-
+.editing-view {
     textarea {
         border: 1px solid #DDD;
-        width: 95%;
+        width: 100%;
         font-size: 16px;
         padding: 15px;
+    }
+
+    .result-list {
+        margin: 0;
+        padding: 0;
+        border: 1px solid #DDD;
+        border-top: none;
+    }
+
+    .search-field {
+        width: calc(99% - 20px);
+        padding: 5px 10px;
+        font-size: 15px;
     }
 
     h3 {
         font-size: 15px;
         text-transform: uppercase;
         text-align: center;
+        margin: 0;
     }
 
-    .assumptions, .consequences {
-        float: left;
-        width: 50%;
-    }
-
-    .search-field {
-        width: 90%;
-        padding: 5px 10px;
-        font-size: 15px;
-    }
 }

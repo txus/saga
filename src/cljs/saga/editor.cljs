@@ -18,8 +18,6 @@
   (js/console.log (apply str (interpose " - " (map pr-str xs)))))
 
 (defn all-facts [passages]
-  (log "ALL FACTS:" passages)
-  (println "ALL FACTS:" passages)
   (->> passages
        (mapcat (fn [passage]
                  (let [{:keys [d/assumptions d/consequences d/choices]} passage
@@ -34,12 +32,15 @@
   (let [st @state]
     (if (empty? query)
       {:value #{}}
-      {:value (into #{} (->> (-> st :editor :story :d/passages)
+      {:value (into #{} (->> (get-in st (-> st :editor :story))
+                             :d/passages
                              (keep (partial get-in st))
                              all-facts
-                             (filter (fn [{:keys [d/description]}]
-                                       (str/includes? (str/lower-case description)
-                                                      (str/lower-case query))))))})))
+                             (keep (partial get-in st))
+                             (filter (fn [{:keys [d/description] :as f}]
+                                       (when (seq f)
+                                         (str/includes? (str/lower-case description)
+                                                        (str/lower-case query)))))))})))
 
 (defn mk-title [{:keys [d/description d/negated?]}]
   (str description (when negated? " (not)")))
@@ -61,9 +62,10 @@
           (let [{:keys [d/id d/description d/negated?] :as fact} (om/props this)
                 {:keys [on-drag-start]} (om/get-computed this)]
             (dom/li #js {:draggable true
-                         :className (str "fact " (if negated? "negative" "positive"))
+                         :className (str "mdl-list__item fact " (if negated? "negative" "positive"))
                          :onDragStart (fn [_] (on-drag-start (select-keys fact (om/get-query Fact))))}
-                    (mk-title fact)))))
+                    (dom/span #js {:className "mdl-list__item-primary-content"}
+                              (mk-title fact))))))
 
 (def fact-view (om/factory Fact {:keyfn (juxt :d/id :d/negated?)}))
 
@@ -79,18 +81,23 @@
   Object
   (render [this]
           (let [{:keys [d/id]} (om/props this)
-                {:keys [delete! edit!]} (om/get-computed this)]
-            (dom/div nil
-                     (dom/li nil
-                             (dom/a #js {:className "edit"
-                                         :onClick #(edit! id)}
-                                    (dom/span nil (str id)))
-                             (dom/a #js {:className "delete"
-                                         :onClick (fn [e]
-                                                    (.preventDefault e)
-                                                    (when (.confirm js/window "Are you sure?")
-                                                      (delete! id)))}
-                                    "X"))))))
+                {:keys [current-passage-id delete! edit!]} (om/get-computed this)]
+            (dom/li #js {:className (str "mdl-list__item passage-link" (when (= id current-passage-id) " selected"))
+                         :onClick #(edit! id)}
+                    (dom/span #js {:className "mdl-list__item-primary-content edit-passage-link"}
+                              (dom/i #js {:className "material-icons"}
+                                     "short_text")
+                              (name id))
+                    (dom/span #js {:className "mdl-list__item-secondary-action"
+                                   :onClick (fn [e]
+                                              (.stopPropagation e)
+                                              (.preventDefault e)
+                                              (when (.confirm js/window "Are you sure?")
+                                                (delete! id))
+                                              false)}
+                              (dom/label #js {:className "mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect"}
+                                         (dom/i #js {:className "material-icons"}
+                                                "delete")))))))
 
 (def passage-link-view (om/factory PassageLink {:keyfn :d/id}))
 
@@ -99,14 +106,15 @@
   (render [this]
           (let [{:keys [d/passages]} (om/props this)
                 {:keys [new-passage] :as computed} (om/get-computed this)]
-            (dom/div nil
-                     (dom/a #js {:className "new-passage"
-                                 :onClick (fn [_]
-                                            (when-let [id (.prompt js/window)]
-                                              (new-passage (s/passage id "write something cool!"))))}
-                            "+")
-                     (dom/h3 nil "Passages")
-                     (apply dom/ul #js {:id "passage-links"}
+            (dom/div #js {:className "passage-links-sidebar sidebar"}
+                     (dom/header nil
+                                 (dom/h5 nil "Passages")
+                                 (dom/button #js {:className "mdl-button mdl-js-button mdl-button--fab mdl-button--mini-fab"
+                                                  :onClick (fn [_]
+                                                             (when-let [id (.prompt js/window "Enter an id for your passage")]
+                                                               (new-passage (s/passage id "write something cool!"))))}
+                                             (dom/i #js {:className "material-icons"} "add")))
+                     (apply dom/ul #js {:id "passage-links" :className "mdl-list"}
                             (map (comp passage-link-view
                                     #(om/computed % computed))
                                  passages))))))
@@ -119,9 +127,10 @@
           (let [{:keys [facts]} (om/props this)
                 computed (om/get-computed this)
                 facts (sort-by :d/description facts)]
-            (dom/div nil
-                     (dom/h3 nil "All facts")
-                     (apply dom/ul #js {:id "all-facts"}
+            (dom/div #js {:className "sidebar"}
+                     (dom/header nil
+                      (dom/h5 nil "All facts"))
+                     (apply dom/ul #js {:className "mdl-list"}
                             (map #(fact-view (om/computed % computed)) facts))))))
 
 (def all-facts-view (om/factory AllFacts))
@@ -149,14 +158,16 @@
 
 (defn result-list [ac type results on-select]
   (dom/ul #js {:key (str type "-result-list")
-               :className "result-list"
+               :className "result-list mdl-list"
                :id (str type "-result-list")}
-          (map #(let [{:keys [d/description d/id] :as fact} %]
+          (map #(let [{:keys [d/description d/id d/negated?] :as fact} %]
                   (dom/li #js {:key (str "result-" (fact-id fact))
+                               :className (str "fact " (if negated? "negative" "positive") " mdl-list__item")
                                :onClick (fn [_]
                                           (om/set-query! ac {:params {:query ""}})
                                           (on-select fact))}
-                          (mk-title fact)))
+                          (dom/span #js {:className "mdl-list__item-primary-content"}
+                                    (mk-title fact))))
                results)))
 
 (defui NewChoiceField
@@ -185,7 +196,10 @@
    #js {:key (str type "-search-field")
         :className "search-field"
         :value query
-        :placeholder "add..."
+        :placeholder (condp = type
+                       :consequences "add consequence..."
+                       :assumptions "add assumption..."
+                       "add...")
         :onKeyPress (fn [e]
                       (when (= 13 (.-charCode e))
                         (let [desc (.. e -target -value)
@@ -223,32 +237,23 @@
   Object
   (render [this]
           (let [{:keys [kind title facts dragging props]} (om/props this)
-                {:keys [add! remove! delete-self!]} (om/get-computed this)]
+                {:keys [className add! remove! delete-self!]} (om/get-computed this)]
             (dom/div (clj->js
                       (merge
-                       {:className (name kind)
+                       {:className (str (or className "") " " (name kind))
                         :onDragOver (fn [e] (.preventDefault e))
                         :onDrop (fn [_]
                                   (when dragging
                                     (add! dragging)))}
                        props))
-                     (dom/h3 nil (or title (str/capitalize (name kind)))
-                             (when delete-self!
-                               (dom/a #js {:className "delete"
-                                           :onClick (fn [e]
-                                                       (.preventDefault e)
-                                                       (when (.confirm js/window "Are you sure?")
-                                                         (delete-self!)))}
-                                       "X")))
                      (auto-completer (om/computed {} {:type kind
                                                       :on-select add!}))
-                     (apply dom/ul nil
+                     (apply dom/ul #js {:className "mdl-list"}
                             (map (fn [{:keys [d/negated?] :as fact}]
-                                   (dom/li #js {:className (str "fact " (if negated? "negative" "positive"))
-                                                :onClick
-                                                (fn [_]
-                                                  (remove! (fact-id fact)))}
-                                           (mk-title fact)))
+                                   (dom/li #js {:className (str "fact " (if negated? "negative" "positive") " mdl-list__item")
+                                                :onClick (fn [_] (remove! (fact-id fact)))}
+                                           (dom/span #js {:className "mdl-list__item-primary-content"}
+                                                     (mk-title fact))))
                                  facts))))))
 
 (def facts-list (om/factory FactsList))
@@ -261,6 +266,43 @@
   (query [this]
          (let [passages-query (om/get-query EditingPassage)]
            `[:story/id :story/title {:d/passages ~passages-query} {:story/facts ~(om/get-query Fact)}])))
+
+(defui ChoicesView
+  Object
+  (render [this]
+          (let [{:keys [choices passage-id dragging]} (om/props this)
+                id passage-id
+                {:keys [transact!]} (om/get-computed this)]
+            (dom/div #js {:className "choices mdl-cell mdl-cell--12-col"}
+                     (dom/h3 nil "Choices")
+                     (new-choice-field (om/computed {} {:on-enter (fn [txt]
+                                                                    (transact! `[(editor/add-choice {:passage-id ~id :choice ~(s/when-chose txt)})]))}))
+                     (apply dom/div #js {:className "mdl-grid"}
+                            (map (fn [{:keys [d/description d/consequences] :as choice}]
+                                   (let [choice-id (:d/id choice)]
+                                     (dom/div #js {:className "choice mdl-cell mdl-cell--6-col mdl-card mdl-shadow--2dp choice-card"
+                                                   :onDragOver (fn [e] (.preventDefault e))
+                                                   :onDrop (fn [_]
+                                                             (when dragging
+                                                               (transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~dragging})])))}
+                                              (dom/div #js {:className "mdl-card__title"}
+                                                       (dom/h5 #js {:className "mdl-card__title-text"})
+                                                       description)
+                                              (dom/div #js {:className "mdl-card__menu"}
+                                                       (dom/button #js {:className "mdl-button mdl-js-button mdl-button--icon"
+                                                                        :onClick #(when (.confirm js/window "Are you sure?")
+                                                                                    (transact! `[(editor/remove-choice {:passage-id ~id :choice-id ~choice-id})]))}
+                                                                   (dom/i #js {:className "material-icons"} "delete")))
+                                              (facts-list (om/computed
+                                                           {:kind :consequences
+                                                            :title ""
+                                                            :dragging dragging
+                                                            :facts consequences}
+                                                           {:add! #(transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~%})])
+                                                            :remove! #(transact! `[(editor/remove-consequence-from-choice {:passage-id ~id :choice-id ~choice-id :fact-id ~%})])})))))
+                                 (sort-by :d/id choices)))))))
+
+(def choices-view (om/factory ChoicesView))
 
 (defui Editing
   static om/IQuery
@@ -277,49 +319,39 @@
                 {:keys [d/text d/id d/assumptions d/consequences d/choices]} passage]
             (if (empty? passage)
               (dom/div nil "Select an existing passage or create a new one.")
-              (dom/div nil
+              (dom/div #js {:className "editing-view mdl-grid"}
                        (dom/textarea #js {:id "text"
+                                          :className "mdl-cell mdl-cell--6-col"
                                           :rows 10
                                           :cols 10
                                           :onChange (fn [e]
                                                       (let [new-text (.. e -target -value)]
                                                         (transact! `[(editor/update-passage {:passage-id ~id :props {:d/text ~new-text}})])))
                                           :value text})
-                       (facts-list (om/computed
-                                    {:kind :assumptions
-                                     :dragging dragging
-                                     :facts assumptions}
-                                    {:add! #(transact! `[(editor/add-assumption {:passage-id ~id :fact ~%})])
-                                     :remove! #(transact! `[(editor/remove-assumption {:passage-id ~id :fact-id ~%})])}))
+                       (dom/div #js {:className "mdl-card mdl-cell--6-col mdl-cell"}
+                                (dom/div #js {:className "mdl-card__title"}
+                                         (dom/h3 #js {:className "mdl-card__title-text"})
+                                         "Assumptions")
+                                (facts-list (om/computed
+                                             {:kind :assumptions
+                                              :dragging dragging
+                                              :facts assumptions}
+                                             {:add! #(transact! `[(editor/add-assumption {:passage-id ~id :fact ~%})])
+                                              :remove! #(transact! `[(editor/remove-assumption {:passage-id ~id :fact-id ~%})])})))
 
-                       (facts-list (om/computed
-                                    {:kind :consequences
-                                     :dragging dragging
-                                     :facts consequences}
-                                    {:add! #(transact! `[(editor/add-consequence {:passage-id ~id :fact ~%})])
-                                     :remove! #(transact! `[(editor/remove-consequence {:passage-id ~id :fact-id ~%})])}))
+                       (dom/div #js {:className "mdl-card mdl-cell--6-col mdl-cell"}
+                                (dom/div #js {:className "mdl-card__title"}
+                                         (dom/h3 #js {:className "mdl-card__title-text"})
+                                         "Consequences")
+                                (facts-list (om/computed
+                                             {:kind :consequences
+                                              :dragging dragging
+                                              :facts consequences}
+                                             {:add! #(transact! `[(editor/add-consequence {:passage-id ~id :fact ~%})])
+                                              :remove! #(transact! `[(editor/remove-consequence {:passage-id ~id :fact-id ~%})])})))
 
-                       (dom/div #js {:className "choices"}
-                                (dom/h3 nil "Choices")
-                                (new-choice-field (om/computed {} {:on-enter (fn [txt]
-                                                                               (transact! `[(editor/add-choice {:passage-id ~id :choice ~(s/when-chose txt)})]))}))
-                                (apply dom/div nil
-                                       (map (fn [{:keys [d/description d/consequences] :as choice}]
-                                              (let [choice-id (:d/id choice)]
-                                                (dom/div #js {:className "choice"
-                                                              :onDragOver (fn [e] (.preventDefault e))
-                                                              :onDrop (fn [_]
-                                                                        (when dragging
-                                                                          (transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~dragging})])))}
-                                                         (facts-list (om/computed
-                                                                      {:kind (keyword (str (name choice-id) "-consequences"))
-                                                                       :title description
-                                                                       :dragging dragging
-                                                                       :facts consequences}
-                                                                      {:delete-self! #(transact! `[(editor/remove-choice {:passage-id ~id :choice-id ~choice-id})])
-                                                                       :add! #(transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~%})])
-                                                                       :remove! #(transact! `[(editor/remove-consequence-from-choice {:passage-id ~id :choice-id ~choice-id :fact-id ~%})])})))))
-                                            (sort-by :d/id choices)))))))))
+                       (choices-view (om/computed {:passage-id id :choices choices :dragging dragging}
+                                                  {:transact! transact!})))))))
 
 (def editing-view (om/factory Editing))
 
@@ -332,29 +364,29 @@
   Object
   (render [this]
           (let [{:keys [editing story] :as props} (om/props this)
+                {:keys [parent]} (om/get-computed this)
                 facts (all-facts (:d/passages story))
-                _ (log facts)
-                _ (println (pr-str facts))
                 edit! (fn [id]
-                        (om/transact! this `[(editor/edit! {:id ~id})]))
+                        (om/transact! parent `[(editor/edit! {:id ~id})]))
                 new-passage (fn [p]
                               (om/transact! this `[(editor/new-passage {:passage ~p})]))
                 delete! (fn [id]
-                          (om/transact! this `[(editor/delete! {:id ~id})]))
+                          (om/transact! parent `[(editor/delete! {:id ~id})]))
                 on-drag-start (fn [fact]
                                 (om/transact! this `[(editor/dragging {:fact ~fact})]))
                 transact! (partial om/transact! this)]
-            (dom/div nil
-                     (dom/div #js {:id "left-sidebar" :className "sidebar"}
+            (dom/div #js {:className "mdl-grid"}
+                     (dom/div #js {:className "mdl-cell mdl-cell--3-col"}
                               (passage-links-view (om/computed story
-                                                               {:edit! edit!
+                                                               {:current-passage-id (-> editing :d/passage :d/id)
+                                                                :edit! edit!
                                                                 :new-passage new-passage
                                                                 :delete! delete!})))
-                     (dom/div #js {:id "editing"}
+                     (dom/div #js {:className "mdl-cell mdl-cell--6-col"}
                               (editing-view (om/computed editing
                                                          {:transact! transact!
                                                           :all-facts facts})))
-                     (dom/div #js {:id "right-sidebar" :className "sidebar"}
+                     (dom/div #js {:className "mdl-cell mdl-cell--3-col"}
                               (all-facts-view (om/computed {:facts facts}
                                                            {:on-drag-start on-drag-start})))))))
 
@@ -378,11 +410,10 @@
      (swap! state
             (fn [st]
               (let [id (:d/id passage)
-                    story-id (-> st :editor :story :story/id)]
+                    story-id (-> st :editor :story second)]
                 (-> st
                     (update :passage/by-id assoc id passage)
                     (update-in [:story/by-id story-id :d/passages] conj [:passage/by-id id])
-                    (update-in [:editor :story :d/passages] conj [:passage/by-id id])
                     (assoc-in [:editor :editing :d/passage] [:passage/by-id id]))))))})
 
 (defmethod mutate 'editor/delete!
@@ -391,15 +422,15 @@
    (fn []
      (swap! state
             (fn [st]
+              (println (-> st :editor :story second))
               (let [st (if (= id (-> st :editor :editing :d/passage second))
                          (update-in st [:editor :editing] dissoc :d/passage)
                          st)
-                    story-id (-> st :editor :story :story/id)
+                    story-id (-> st :editor :story second)
                     remove-passage (fn [passages]
                                      (vec (remove (fn [[_ pid]] (= id pid)) passages)))]
                 (-> st
-                    (update-in [:story/by-id story-id :d/passages] remove-passage)
-                    (update-in [:editor :story :d/passages] remove-passage))))))})
+                    (update-in [:story/by-id story-id :d/passages] remove-passage))))))})
 
 (defmethod mutate 'editor/dragging
   [{:keys [state]} _ {:keys [fact]}]
@@ -427,7 +458,6 @@
 (defn add-fact [st passage-id ty fact]
   (let [new-fact (format-fact fact)
         new-fact-id (fact-id new-fact)]
-    (println (keys (:fact/by-id st)))
     (-> st
         (assoc-in [:fact/by-id new-fact-id] new-fact)
         (update-in [:passage/by-id passage-id ty]
@@ -517,14 +547,3 @@
             (fn [st]
               (update-in st [:passage/by-id passage-id]
                          #(merge % props)))))})
-
-;; (defn save-story! [name passages])
-
-;; (defn current-passages []
-;;   (let [raw-data @reconciler
-;;         passages (:d/passages
-;;                   (om/db->tree
-;;                    [{:d/passages (om/get-query EditingPassage)}]
-;;                    raw-data
-;;                    raw-data))]
-;;     passages))

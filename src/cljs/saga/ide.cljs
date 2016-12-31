@@ -134,18 +134,28 @@
   (render [this]
           (let [{:keys [story/id story/title d/passages]} (om/props this)
                 {:keys [play-story! edit-story! delete-story!]} (om/get-computed this)]
-            (dom/li #js {:className "story"
-                         :key id}
-                     (dom/h2 nil title)
-                     (dom/ul #js {:className "story-actions"}
-                             (dom/li #js {:key (str "play-" id)}  (dom/a #js {:onClick #(play-story! id)} "Play"))
-                             (dom/li #js {:key (str "download-" id)}  (dom/a #js {:download (str title ".edn") :href (persistence/story->download-url (get-story id)) :target "_blank"}
-                                                                                 "Download"))
-                             (dom/li #js {:key (str "edit-" id)} (dom/a #js {:onClick #(edit-story! id)} "Edit"))
-                             (dom/li #js {:key (str "delete-" id)}
-                                     (dom/a #js {:onClick #(when (.confirm js/window "Are you sure?")
-                                                             (delete-story! id))}
-                                                "Delete")))))))
+            (dom/div #js {:className "story-card mdl-card mdl-shadow--2dp mdl-cell mdl-cell--3-col"
+                          :key id}
+                     (dom/div #js {:className "mdl-card__title"}
+                              (dom/h2 #js {:className "mdl-card__title-text"}
+                                      title))
+                     (dom/div #js {:className "mdl-card__actions story-actions"}
+                              (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
+                                               :onClick #(play-story! id)}
+                                          (dom/i #js {:className "material-icons"} "play_arrow"))
+                              (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
+                                               :onClick #(edit-story! id)}
+                                          (dom/i #js {:className "material-icons"} "edit"))
+                              (dom/a #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
+                                          :download (str title ".edn")
+                                          :href (persistence/story->download-url (get-story id))
+                                          :target "_blank"}
+                                     (dom/i #js {:className "material-icons"} "file_download")))
+                     (dom/div #js {:className "mdl-card__menu"}
+                              (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button-icon"
+                                               :onClick #(when (.confirm js/window "Are you sure?")
+                                                           (delete-story! id))}
+                                          (dom/i #js {:className "material-icons"} "delete")))))))
 
 (def story-view (om/factory Story {:keyfn :story/id}))
 
@@ -154,12 +164,42 @@
   (render [this]
           (let [{:keys [stories]} (om/props this)
                 computed (om/get-computed this)]
-            (apply dom/ul #js {:className "stories"}
+            (apply dom/div #js {:className "stories mdl-grid"}
                    (map
                     #(story-view (om/computed % computed))
                     stories)))))
 
 (def story-list-view (om/factory StoryList))
+
+(defn navigation-for [this screen]
+  (when (= screen :editor)
+    (dom/nav #js {:className "mdl-navigation"}
+             (dom/a #js {:className "mdl-navigation__link"
+                         :href ""
+                         :onClick (fn [e]
+                                    (.preventDefault e)
+                                    (om/transact! this `[(routes/navigate {:screen :main})])
+                                    false)}
+                    "Back"))))
+
+(defn title-for [this screen]
+  (if (= screen :editor)
+    (let [{:keys [editor]} (om/props this)]
+      (str
+       (-> editor :story :story/title)
+       (when-let [p (-> editor :editing :d/passage :d/id)]
+         (str " - " (name p)))))
+    "Stories"))
+
+
+(defn main-header-view [this]
+  (dom/header #js {:className "ide-actions"}
+              (dom/button #js {:className "ide-action mdl-button mdl-js-button mdl-button--fab"
+                               :onClick (fn [_]
+                                          (when-let [title (.prompt js/window "Enter a title for your story")]
+                                            (om/transact! this `[(story/add! {:title ~title})])))}
+                          (dom/i #js {:className "material-icons"} "add"))
+              (upload/view (om/computed {:className "ide-action"} {:upload-fn (partial upload/upload-file this)}))))
 
 (defui App
   static om/IQuery
@@ -173,23 +213,26 @@
   Object
   (render [this]
           (let [{:keys [screen stories editor player]} (om/props this)]
-            (condp = screen
-              :main
-              (dom/div nil
-                       (dom/h3 nil "Your stories")
-                       (upload/view (om/computed {} {:upload-fn (partial upload/upload-file this)}))
-                       (story-list-view (om/computed {:stories stories}
-                                                     {:play-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :player :id ~id})]))
-                                                      :download-story! (fn [id] (om/transact! this `[(routes/download {:id ~id})]))
-                                                      :edit-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :editor :id ~id})]))
-                                                      :delete-story! (fn [id] (om/transact! this `[(app/delete-story {:id ~id})]))})))
-              :editor
-              (dom/div nil
-                       (dom/h3 nil (:title editor))
-                       (dom/a #js {:onClick (fn [_] (om/transact! this `[(routes/navigate {:screen :main})]))}
-                              "Back")
-                       (editor/view editor))
-              (dom/div nil "Oops, you're lost!")))))
+            (dom/div #js {:className "mdl-layout mdl-js-layout mdl-layout--fixed-header"}
+                     (dom/header #js {:className "mdl-layout__header"}
+                                 (dom/div #js {:className "mdl-layout__header-row"}
+                                          (dom/span #js {:className "mdl-layout-title"} (title-for this screen))
+                                          (dom/div #js {:className "mdl-layout-spacer"})
+                                          (navigation-for this screen)))
+                     (dom/main #js {:className "mdl-layout__content"}
+                               (dom/div #js {:className "page-content"}
+                                        (condp = screen
+                                          :main
+                                          (dom/div nil
+                                                   (main-header-view this)
+                                                   (story-list-view (om/computed {:stories stories}
+                                                                                 {:play-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :player :id ~id})]))
+                                                                                  :download-story! (fn [id] (om/transact! this `[(routes/download {:id ~id})]))
+                                                                                  :edit-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :editor :id ~id})]))
+                                                                                  :delete-story! (fn [id] (om/transact! this `[(app/delete-story {:id ~id})]))})))
+                                          :editor
+                                          (editor/view (om/computed editor {:parent this}))
+                                          (dom/div nil "Oops, you're lost!"))))))))
 
 (def reconciler
   (om/reconciler {:state (or (persistence/get-state "ide") init-data)
@@ -234,10 +277,17 @@
 (defroute "/download/:id" [id]
   (om/transact! reconciler `[(routes/download {:id ~id})]))
 
+(def auto-save (atom nil))
+
 (defn init []
-  (js/setInterval
-   #(om/transact! reconciler `[(app/save-state)])
-   5000)
+  (swap! auto-save
+         (fn [interval?]
+           (when interval?
+             (println "there is an interval")
+             (.clearInterval js/window interval?))
+           (.setInterval js/window
+            #(om/transact! reconciler `[(app/save-state)])
+            5000)))
   (om/add-root! reconciler
                 App
                 (gdom/getElement "container")))

@@ -22,17 +22,19 @@
 (defui UploadFormView
   Object
   (render [this]
-          (let [{:keys [title]
-                 :or {title "Upload story:"}}
+          (let [{:keys [title className]
+                 :or {title "Upload story:"
+                      className ""}}
                 (om/props this)
                 {:keys [upload-fn]} (om/get-computed this)]
-            (dom/div #js {:id "upload"}
-                     (dom/label #js {:name "csv"} title)
-                     (dom/input #js {:type "file" :id "story-upload" :name "story" :accept ".edn"
-                                     :onChange (fn [e]
-                                                 (let [file (aget (.. e -target -files) 0)
-                                                       name (.-name file)
-                                                       type (.-type file)]
-                                                   (upload-fn {:name name :type type :file file})))})))))
+            (dom/div #js {:className (str "file-input " className)}
+                     (dom/label #js {:className "mdl-button mdl-js-button mdl-button--fab mdl-js-ripple-effect"}
+                                (dom/i #js {:className "material-icons"} "file_upload")
+                                (dom/input #js {:type "file" :id "story-upload" :name "story" :accept ".edn"
+                                                :onChange (fn [e]
+                                                            (let [file (aget (.. e -target -files) 0)
+                                                                  name (.-name file)
+                                                                  type (.-type file)]
+                                                              (upload-fn {:name name :type type :file file})))}))))))
 
 (def view (om/factory UploadFormView))

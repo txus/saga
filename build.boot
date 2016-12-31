@@ -90,6 +90,8 @@
    (sass)
    (sift :include #{#"cache\.manifest"
                     #"css\/fonts\.css"
+                    #"css\/material\.css"
+                    #"js\/material\.js"
                     (re-pattern (str build-target "\\.html"))
                     (re-pattern (str "css/" build-target "\\.css"))
                     (re-pattern (str "js/" build-target "\\.js"))})
