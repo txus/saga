@@ -57,7 +57,7 @@
   identity)
 
 (deftask player-development []
-  (set-env! :resource-paths #(into % "dev-resources" "player-resources"))
+  (set-env! :resource-paths #(into % #{"dev-resources" "player-resources"}))
   (task-options! reload {:on-jsload 'saga.player/init}
                  cljs {:optimizations :none
                        :compiler-options
