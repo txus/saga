@@ -2,7 +2,9 @@ CACHE MANIFEST
 
 CACHE:
 js/ide.js
+js/material.js
 css/ide.css
+css/material.css
 css/fonts.css
 
 NETWORK:

@@ -2,7 +2,9 @@ CACHE MANIFEST
 
 CACHE:
 js/player.js
+js/material.js
 css/player.css
+css/material.css
 css/fonts.css
 
 NETWORK:
