@@ -68,17 +68,32 @@ There are currently no automated tests. To run them anyway:
     
 ## Roadmap
 
+### General 
+
 * [x] Basic IDE working
 * [x] Basic Player working
 * [x] Exporting stories from IDE as EDN files
 * [x] Loading stories from Player as EDN files
 * [x] Saving / restoring app state automatically from local storage (IDE & Player)
 * [x] HTML5 Offline capability
-* [ ] Modeling probabilistic events (right now a choice between N potential next passages is random)
+* [x] Material design in the IDE
+* [ ] Material design in the Player
+* [ ] Probabilistic passage links
+* [ ] Probabilistic facts
+
+### Tooling / Debugging
+
 * [ ] Debugging a passage by running it with a canned bag of facts
 * [ ] Debugging-enabled player within the IDE (manipulating facts, etc)
-* [ ] Tests!!!
-* [ ] Sass Styles
+* [ ] Debugging-enabled player within the IDE (manipulating facts, etc)
+* [ ] User-driven, generative testing of stories
+
+### Sanity
+
+* [ ] Test everything!!!
+* [ ] Write about Saga's design decisions
+
+### Release
+
 * [ ] Package Player as a React Native app
 * [ ] Set up Github releases with Travis CI artifacts
-* [ ] Write about Saga's design decisions
