@@ -5,6 +5,7 @@
             [saga.data :as d])
   (:refer-clojure :exclude [next]))
 
+
 (defn log [& xs]
   (js/console.log (apply str (interpose " - " (map pr-str xs)))))
 
@@ -24,14 +25,23 @@
 (defn- find-choice [choices choice-id]
   (first (filter (comp (partial = choice-id) :d/id) choices)))
 
+(defn- choose [choice-id choices]
+  (log "Choosing" choice-id "among" choices)
+  (if-let [choice (-> choices (find-choice choice-id))]
+    choice
+    (throw (ex-info "Choice is not available."
+                    {:available-choices choices
+                     :chose choice-id}))))
+
 (defn next
   ([world] (next world nil))
   ([{:keys [d/passages d/facts d/path] :as world} choice-id?]
+   (println "WORLD choosing" choice-id?)
    (let [current (last path)
          facts (set/union (set facts) (set (:d/consequences current)))
          new-facts (if-not choice-id?
                      facts
-                     (reconcile facts (-> current :d/choices (find-choice choice-id?) :d/consequences set)))
+                     (reconcile facts (-> (choose choice-id? (:d/choices current)) :d/consequences set)))
          possible-passages (filter
                             (fn [{:keys [d/assumptions d/id] :as passage}]
                               (and (apply not= (map :d/id [current passage]))
@@ -50,6 +60,7 @@
                                            (conj
                                             (cond-> (last path) choice-id? (assoc :d/chose choice-id?))
                                             next-passage)))]
+         (println "next world:" (:d/path next-world) choice-id?)
          (if (empty? (:d/choices next-passage))
            (next next-world)
            next-world))))))

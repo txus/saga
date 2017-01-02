@@ -199,7 +199,7 @@
                                           (when-let [title (.prompt js/window "Enter a title for your story")]
                                             (om/transact! this `[(story/add! {:title ~title})])))}
                           (dom/i #js {:className "material-icons"} "add"))
-              (upload/view (om/computed {:className "ide-action"} {:upload-fn (partial upload/upload-file this)}))))
+              (upload/view (om/computed {:className "ide-action mdl-button--fab"} {:upload-fn (partial upload/upload-file this)}))))
 
 (defui App
   static om/IQuery

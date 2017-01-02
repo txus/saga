@@ -8,6 +8,7 @@
             [saga.persistence :as persistence]
             [saga.syntax :as s]
             [om.util :as u]
+            [plumbing.core :refer [map-vals]]
             devtools.core
             [om.dom :as dom]
             [clojure.string :as str]))
@@ -52,9 +53,8 @@
              #js {:className "choices"}
              (map
               (fn [{:keys [d/id d/description]}]
-                (dom/li #js {:key id}
-                        (dom/button #js {:className "choice"
-                                         :onClick (fn [_] (choose! id))} description)))
+                (dom/li #js {:key id :className "choice"}
+                        (dom/a #js {:onClick (fn [_] (choose! id))} description)))
               choices)))))
 
 (def choices-view (om/factory Choices))
@@ -76,7 +76,11 @@
              (if last?
                (choices-view (om/computed {:choices choices}
                                           {:choose! choose!}))
-               (dom/p nil (first (get choices chose))))))))
+               (let [historical-choice
+                     (first (filter (fn [{:keys [d/id]}]
+                                      (= id chose))
+                                    choices))]
+                 (dom/p nil (:d/description historical-choice))))))))
 
 (def passage-view (om/factory Passage))
 
@@ -109,23 +113,37 @@
 
   Object
   (render [this]
-          (let [{:keys [story/title d/path d/passages] :as props} (om/props this)]
-            (dom/div nil
-                     (upload/view (om/computed {:title "Load story:"} {:upload-fn (partial upload/upload-file this)}))
-                     (dom/button #js {:onClick #(om/transact! this `[(world/restart)])}
-                                 "Restart")
-                     (dom/h2 nil title)
-                     (when (seq passages)
-                       (playing-story-view props))))))
+          (let [{:keys [story/title d/path d/passages] :as props} (om/props this)
+                story? (seq passages)]
+            (dom/div #js {:className "mdl-layout mdl-js-layout player mdl-layout--fixed-header"}
+                     (dom/header #js {:className "mdl-layout__header mdl-layout__header--transparent"}
+                                 (dom/div #js {:className "mdl-layout__header-row"}
+                                          (dom/span #js {:className "mdl-layout-title"} title)
+                                          (dom/div #js {:className "mdl-layout-spacer"})
+                                          (dom/nav #js {:className "mdl-navigation"}
+                                                   (when story?
+                                                     (dom/a #js {:className "mdl-navigation__link"
+                                                                 :onClick #(om/transact! this `[(world/restart)])}
+                                                            (dom/i #js {:className "material-icons"} "restore")
+                                                            " Restart"))
+                                                   (upload/view (om/computed {:title "Load story"} {:upload-fn (partial upload/upload-file this)})))))
+                     (dom/main #js {:className "mdl-layout__content"}
+                               (when story?
+                                 (playing-story-view props)))))))
 
 (defmethod mutate 'world/restart
   [{:keys [state] :as env} _ {:keys [story]}]
   {:action (fn []
              (swap! state
                     (fn [st]
-                      (assoc st
-                             :d/facts #{}
-                             :d/path [(first (:d/passages st))]))))})
+                      (-> st
+                          (assoc :d/facts #{})
+                          (update :d/path (comp vec (partial take 1)))
+                          (update :passage/by-id (fn [pbid]
+                                                   (map-vals
+                                                    (fn [v]
+                                                      (dissoc v :d/chose))
+                                                    pbid)))))))})
 
 (defmethod mutate 'story/upload
   [{:keys [state] :as env} _ {:keys [story]}]

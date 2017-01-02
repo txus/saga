@@ -11,22 +11,44 @@ body {
     width: 70%;
 }
 
+#story-upload {
+    display: none;
+}
+
+main {
+    padding: 10px;
+    p, .historical-choice {
+        font-size: 18px;
+    }
+}
+
+.mdl-layout.player {
+    .mdl-layout-title, .mdl-layout__drawer-button {
+        font: 100% $font-stack;
+        font-size: 22px;
+        color: rgb(10%, 10%, 10%);
+    }
+    .mdl-layout__header a {
+        cursor: pointer;
+        color: rgb(10%, 10%, 10%);
+    }
+}
+
 .choices {
     list-style: none;
     display: block;
     min-height: 30px;
-    .historical-choice {
-        padding: 10px;
-        display: block;
-        color: grey;
-    }
     .choice {
-        padding: 10px;
         cursor: pointer;
-        float: left;
-        margin-right: 15px;
-        display: inline-block;
-        opacity: 0.7;
+        a {
+            color: rgb(10%, 10%, 10%);
+            font-size: 18px;
+        }
+        margin-bottom: 20px;
+
+        opacity: 0.6;
+
+        transition: opacity 0.5s;
 
         &:hover {
             opacity: 1;

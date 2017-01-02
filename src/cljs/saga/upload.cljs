@@ -22,19 +22,31 @@
 (defui UploadFormView
   Object
   (render [this]
-          (let [{:keys [title className]
-                 :or {title "Upload story:"
-                      className ""}}
+          (let [{:keys [title className mode]
+                 :or {title "Upload story"
+                      className ""
+                      mode :button}}
                 (om/props this)
-                {:keys [upload-fn]} (om/get-computed this)]
+                {:keys [upload-fn] :or {className ""}} (om/get-computed this)]
             (dom/div #js {:className (str "file-input " className)}
-                     (dom/label #js {:className "mdl-button mdl-js-button mdl-button--fab mdl-js-ripple-effect"}
-                                (dom/i #js {:className "material-icons"} "file_upload")
-                                (dom/input #js {:type "file" :id "story-upload" :name "story" :accept ".edn"
-                                                :onChange (fn [e]
-                                                            (let [file (aget (.. e -target -files) 0)
-                                                                  name (.-name file)
-                                                                  type (.-type file)]
-                                                              (upload-fn {:name name :type type :file file})))}))))))
+                     (if (= mode :link)
+                       (dom/a #js {:className "mdl-navigation__link"
+                                   :onClick (fn [e] (.preventDefault e) false)}
+                              (dom/i #js {:className "material-icons"} "file_upload")
+                              (str " " title)
+                              (dom/input #js {:type "file" :id "story-upload" :name "story" :accept ".edn"
+                                              :onChange (fn [e]
+                                                          (let [file (aget (.. e -target -files) 0)
+                                                                name (.-name file)
+                                                                type (.-type file)]
+                                                            (upload-fn {:name name :type type :file file})))}))
+                       (dom/label #js {:className (str "mdl-button mdl-js-button mdl-js-ripple-effect " className)}
+                                  (dom/i #js {:className "material-icons"} "file_upload")
+                                  (dom/input #js {:type "file" :id "story-upload" :name "story" :accept ".edn"
+                                                  :onChange (fn [e]
+                                                              (let [file (aget (.. e -target -files) 0)
+                                                                    name (.-name file)
+                                                                    type (.-type file)]
+                                                                (upload-fn {:name name :type type :file file})))})))))))
 
 (def view (om/factory UploadFormView))
