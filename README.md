@@ -21,15 +21,13 @@ get you started.
 
 This repo contains two separate projects that share some common code:
 
-* IDE: An IDE to build stories.
-* Player: An app to play stories.
+* IDE: An IDE to build stories. ![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE")
+* Player: An app to play stories. ![Saga Player](/screenshots/player.png?raw=true "Saga Player")
 
 The interpreter used by the player lives in the `saga.engine` namespace.
 
 Saga programs (stories) are exported and imported as EDN files. More about this
 to come.
-
-![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE")
 
 ## Building
 
@@ -77,7 +75,7 @@ There are currently no automated tests. To run them anyway:
 * [x] Saving / restoring app state automatically from local storage (IDE & Player)
 * [x] HTML5 Offline capability
 * [x] Material design in the IDE
-* [ ] Material design in the Player
+* [x] Material design in the Player
 * [ ] Probabilistic passage links
 * [ ] Probabilistic facts
 
