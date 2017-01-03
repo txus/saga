@@ -20,27 +20,40 @@
 (defn all-facts [passages]
   (->> passages
        (mapcat (fn [passage]
-                 (let [{:keys [d/assumptions d/consequences d/choices]} passage
-                       passage-facts (concat assumptions
+                 (let [{:keys [d/preconditions d/consequences d/choices]} passage
+                       passage-facts (concat preconditions
                                              consequences
                                              (mapcat :d/consequences choices))]
                    passage-facts)))
        set))
 
 (defmethod read :search/results
-  [{:keys [state ast] :as env} k {:keys [query]}]
+  [{:keys [state ast] :as env} k {:keys [query type]}]
   (let [st @state]
+    (println (-> st :editor :story))
     (if (empty? query)
       {:value #{}}
-      {:value (into #{} (->> (get-in st (-> st :editor :story))
-                             :d/passages
-                             (keep (partial get-in st))
-                             all-facts
-                             (keep (partial get-in st))
-                             (filter (fn [{:keys [d/description] :as f}]
-                                       (when (seq f)
-                                         (str/includes? (str/lower-case description)
-                                                        (str/lower-case query)))))))})))
+      {:value
+       (condp = type
+         :fact
+         (into #{} (->> (get-in st (-> st :editor :story))
+                        :d/passages
+                        (keep (partial get-in st))
+                        all-facts
+                        (keep (partial get-in st))
+                        (filter (fn [{:keys [d/description] :as f}]
+                                  (when (seq f)
+                                    (str/includes? (str/lower-case description)
+                                                   (str/lower-case query)))))))
+         :passage
+         (into #{} (->> (get-in st (-> st :editor :story))
+                        :d/passages
+                        (map last)
+                        (filter (fn [id]
+                                  (str/includes? (str/lower-case (name id))
+                                                 (str/lower-case query))))
+                        (map (fn [id]
+                               {:d/id id})))))})))
 
 (defn mk-title [{:keys [d/description d/negated?]}]
   (str description (when negated? " (not)")))
@@ -81,8 +94,10 @@
   Object
   (render [this]
           (let [{:keys [d/id]} (om/props this)
-                {:keys [current-passage-id delete! edit!]} (om/get-computed this)]
+                {:keys [current-passage-id on-drag-start delete! edit!]} (om/get-computed this)]
             (dom/li #js {:className (str "mdl-list__item passage-link" (when (= id current-passage-id) " selected"))
+                         :draggable true
+                         :onDragStart (fn [_] (on-drag-start {:d/id id}))
                          :onClick #(edit! id)}
                     (dom/span #js {:className "mdl-list__item-primary-content edit-passage-link"}
                               (dom/i #js {:className "material-icons"}
@@ -141,6 +156,12 @@
          (let [fact-query (om/get-query Fact)]
            `[:d/id :d/description {:d/consequences ~fact-query}])))
 
+
+(defui Link
+  static om/IQuery
+  (query [this]
+         [:d/id :d/probability]))
+
 (defui EditingPassage
   static om/Ident
   (ident [this {:keys [d/id]}]
@@ -149,14 +170,30 @@
   static om/IQuery
   (query [this]
          (let [fact-query (om/get-query Fact)
+               link-query (om/get-query Link)
                choice-query (om/get-query Choice)]
            `[:d/id
              :d/text
+             {:d/links ~link-query}
              {:d/consequences ~fact-query}
-             {:d/assumptions ~fact-query}
+             {:d/preconditions ~fact-query}
              {:d/choices ~choice-query}])))
 
-(defn result-list [ac type results on-select]
+(defn passage-result-list [ac results on-select]
+  (dom/ul #js {:key (str type "-result-list")
+               :className "result-list mdl-list"
+               :id (str type "-result-list")}
+          (map #(let [{:keys [d/id] :as link} %]
+                  (dom/li #js {:key (str "result-" (name id))
+                               :className "mdl-list__item"
+                               :onClick (fn [_]
+                                          (om/set-query! ac {:params {:query ""}})
+                                          (on-select link))}
+                          (dom/span #js {:className "mdl-list__item-primary-content"}
+                                    (name id))))
+               results)))
+
+(defn fact-result-list [ac type results on-select]
   (dom/ul #js {:key (str type "-result-list")
                :className "result-list mdl-list"
                :id (str type "-result-list")}
@@ -191,6 +228,22 @@
 
 (def new-choice-field (om/factory NewChoiceField))
 
+(defn passage-search-field [ac query on-select]
+  (dom/input
+   #js {:key "passage-search-field"
+        :className "search-field"
+        :value query
+        :placeholder "link passage..."
+        :onKeyPress (fn [e]
+                      (when (= 13 (.-charCode e))
+                        (let [desc (.. e -target -value)]
+                          (om/set-query! ac {:params {:query ""}})
+                          (on-select {:d/id desc}))))
+        :onChange
+        (fn [e]
+          (om/set-query! ac
+                         {:params {:query (.. e -target -value)}}))}))
+
 (defn search-field [ac type query on-select]
   (dom/input
    #js {:key (str type "-search-field")
@@ -198,7 +251,7 @@
         :value query
         :placeholder (condp = type
                        :consequences "add consequence..."
-                       :assumptions "add assumption..."
+                       :preconditions "add precondition..."
                        "add...")
         :onKeyPress (fn [e]
                       (when (= 13 (.-charCode e))
@@ -213,13 +266,33 @@
           (om/set-query! ac
                          {:params {:query (.. e -target -value)}}))}))
 
-(defui AutoCompleter
+(defui PassageAutoCompleter
   static om/IQueryParams
   (params [_]
           {:query ""})
   static om/IQuery
   (query [_]
-         '[(:search/results {:query ?query})])
+         '[(:search/results {:query ?query :type :passage})])
+  Object
+  (render [this]
+          (let [{:keys [search/results]} (om/props this)
+                {:keys [on-select]} (om/get-computed this)
+                sorted (->> results
+                            (sort-by :d/id))]
+            (dom/div nil
+                     (cond->
+                         [(passage-search-field this (:query (om/get-params this)) on-select)]
+                       (not (empty? sorted)) (conj (passage-result-list this sorted on-select)))))))
+
+(def passage-auto-completer (om/factory PassageAutoCompleter))
+
+(defui FactAutoCompleter
+  static om/IQueryParams
+  (params [_]
+          {:query ""})
+  static om/IQuery
+  (query [_]
+         '[(:search/results {:query ?query :type :fact})])
   Object
   (render [this]
           (let [{:keys [search/results]} (om/props this)
@@ -229,25 +302,25 @@
             (dom/div nil
                      (cond->
                          [(search-field this type (:query (om/get-params this)) on-select)]
-                       (not (empty? sorted)) (conj (result-list this type sorted on-select)))))))
+                       (not (empty? sorted)) (conj (fact-result-list this type sorted on-select)))))))
 
-(def auto-completer (om/factory AutoCompleter))
+(def fact-auto-completer (om/factory FactAutoCompleter))
 
 (defui FactsList
   Object
   (render [this]
-          (let [{:keys [kind title facts dragging props]} (om/props this)
+          (let [{:keys [kind title facts dragging-fact props]} (om/props this)
                 {:keys [className add! remove! delete-self!]} (om/get-computed this)]
             (dom/div (clj->js
                       (merge
                        {:className (str (or className "") " " (name kind))
                         :onDragOver (fn [e] (.preventDefault e))
                         :onDrop (fn [_]
-                                  (when dragging
-                                    (add! dragging)))}
+                                  (when dragging-fact
+                                    (add! dragging-fact)))}
                        props))
-                     (auto-completer (om/computed {} {:type kind
-                                                      :on-select add!}))
+                     (fact-auto-completer (om/computed {} {:type kind
+                                                           :on-select add!}))
                      (apply dom/ul #js {:className "mdl-list"}
                             (map (fn [{:keys [d/negated?] :as fact}]
                                    (dom/li #js {:className (str "fact " (if negated? "negative" "positive") " mdl-list__item")
@@ -257,6 +330,40 @@
                                  facts))))))
 
 (def facts-list (om/factory FactsList))
+
+(defui LinksList
+  Object
+  (render [this]
+          (let [{:keys [links dragging-passage]} (om/props this)
+                {:keys [add! remove! update-probability!]} (om/get-computed this)]
+            (dom/div #js {:onDragOver (fn [e] (.preventDefault e))
+                          :onDrop (fn [_]
+                                    (when dragging-passage
+                                      (add! dragging-passage)))}
+                     (passage-auto-completer (om/computed {} {:on-select add!}))
+                     (apply dom/ul #js {:className "mdl-list link-list"}
+                            (map (fn [{:keys [d/id d/probability] :as link}]
+                                   (dom/li #js {:className "link mdl-list__item"}
+                                           (dom/span #js {:className "mdl-list__item-primary-content"}
+                                                     (dom/span nil (str (name id) " ("))
+                                                     (dom/input #js {:className "link-probability"
+                                                                     :value (str (when probability (* 100 probability)))
+                                                                     :onChange (fn [e]
+                                                                                 (let [new-probability (.. e -target -value)]
+                                                                                   (update-probability! id new-probability)))})
+                                                     (dom/span nil " %)"))
+                                           (dom/span #js {:className "mdl-list__item-secondary-action"
+                                                          :onClick (fn [e]
+                                                                     (.stopPropagation e)
+                                                                     (.preventDefault e)
+                                                                     (remove! id)
+                                                                     false)}
+                                                     (dom/label #js {:className "mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect"}
+                                                                (dom/i #js {:className "material-icons"}
+                                                                       "delete")))))
+                                 links))))))
+
+(def links-list (om/factory LinksList))
 
 (defui CurrentStory
   static om/Ident
@@ -270,7 +377,7 @@
 (defui ChoicesView
   Object
   (render [this]
-          (let [{:keys [choices passage-id dragging]} (om/props this)
+          (let [{:keys [choices passage-id dragging-fact]} (om/props this)
                 id passage-id
                 {:keys [transact!]} (om/get-computed this)]
             (dom/div #js {:className "choices mdl-cell mdl-cell--12-col"}
@@ -283,8 +390,8 @@
                                      (dom/div #js {:className "choice mdl-cell mdl-cell--6-col mdl-card mdl-shadow--2dp choice-card"
                                                    :onDragOver (fn [e] (.preventDefault e))
                                                    :onDrop (fn [_]
-                                                             (when dragging
-                                                               (transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~dragging})])))}
+                                                             (when dragging-fact
+                                                               (transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~dragging-fact})])))}
                                               (dom/div #js {:className "mdl-card__title"}
                                                        (dom/h5 #js {:className "mdl-card__title-text"})
                                                        description)
@@ -296,7 +403,7 @@
                                               (facts-list (om/computed
                                                            {:kind :consequences
                                                             :title ""
-                                                            :dragging dragging
+                                                            :dragging-fact dragging-fact
                                                             :facts consequences}
                                                            {:add! #(transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~%})])
                                                             :remove! #(transact! `[(editor/remove-consequence-from-choice {:passage-id ~id :choice-id ~choice-id :fact-id ~%})])})))))
@@ -310,13 +417,14 @@
          (let [sub (om/get-query EditingPassage)
                fact-sub (om/get-query Fact)]
            `[{:d/passage ~sub}
-             {:dragging ~fact-sub}]))
+             {:dragging-fact ~fact-sub}
+             {:dragging-passage [:d/id]}]))
 
   Object
   (render [this]
-          (let [{:keys [d/passage dragging]} (om/props this)
+          (let [{:keys [d/passage dragging-fact dragging-passage]} (om/props this)
                 {:keys [transact! all-facts]} (om/get-computed this)
-                {:keys [d/text d/id d/assumptions d/consequences d/choices]} passage]
+                {:keys [d/text d/id d/links d/preconditions d/consequences d/choices]} passage]
             (if (empty? passage)
               (dom/div nil "Select an existing passage or create a new one.")
               (dom/div #js {:className "editing-view mdl-grid"}
@@ -331,13 +439,13 @@
                        (dom/div #js {:className "mdl-card mdl-cell--6-col mdl-cell"}
                                 (dom/div #js {:className "mdl-card__title"}
                                          (dom/h3 #js {:className "mdl-card__title-text"})
-                                         "Assumptions")
+                                         "Preconditions")
                                 (facts-list (om/computed
-                                             {:kind :assumptions
-                                              :dragging dragging
-                                              :facts assumptions}
-                                             {:add! #(transact! `[(editor/add-assumption {:passage-id ~id :fact ~%})])
-                                              :remove! #(transact! `[(editor/remove-assumption {:passage-id ~id :fact-id ~%})])})))
+                                             {:kind :preconditions
+                                              :dragging-fact dragging-fact
+                                              :facts preconditions}
+                                             {:add! #(transact! `[(editor/add-precondition {:passage-id ~id :fact ~%})])
+                                              :remove! #(transact! `[(editor/remove-precondition {:passage-id ~id :fact-id ~%})])})))
 
                        (dom/div #js {:className "mdl-card mdl-cell--6-col mdl-cell"}
                                 (dom/div #js {:className "mdl-card__title"}
@@ -345,12 +453,31 @@
                                          "Consequences")
                                 (facts-list (om/computed
                                              {:kind :consequences
-                                              :dragging dragging
+                                              :dragging-fact dragging-fact
                                               :facts consequences}
                                              {:add! #(transact! `[(editor/add-consequence {:passage-id ~id :fact ~%})])
                                               :remove! #(transact! `[(editor/remove-consequence {:passage-id ~id :fact-id ~%})])})))
+                       (dom/div #js {:className "mdl-card mdl-cell--12-col mdl-cell"}
+                                (dom/div #js {:className "mdl-card__title"}
+                                         (dom/h3 #js {:className "mdl-card__title-text"})
+                                         "Links")
+                                (links-list (om/computed
+                                             {:dragging-passage dragging-passage
+                                              :links links}
+                                             {:update-probability! (fn [id probability]
+                                                                     (let [probability (if (empty? probability)
+                                                                                         nil
+                                                                                         probability)]
+                                                                       (when probability
+                                                                         (when-let [parsed (try (js/parseFloat probability)
+                                                                                                (catch js/Error _))]
+                                                                           (if (> parsed 100)
+                                                                             (throw (js/Error. "A probability can't be higher than 100%"))
+                                                                             (transact! `[(editor/update-link-probability {:passage-id ~id :link-id ~id :probability ~(/ parsed 100)})]))))))
+                                              :add! #(transact! `[(editor/add-link {:passage-id ~id :link ~%})])
+                                              :remove! #(transact! `[(editor/remove-link {:passage-id ~id :link-id ~%})])})))
 
-                       (choices-view (om/computed {:passage-id id :choices choices :dragging dragging}
+                       (choices-view (om/computed {:passage-id id :choices choices :dragging-fact dragging-fact}
                                                   {:transact! transact!})))))))
 
 (def editing-view (om/factory Editing))
@@ -372,13 +499,16 @@
                               (om/transact! this `[(editor/new-passage {:passage ~p})]))
                 delete! (fn [id]
                           (om/transact! parent `[(editor/delete! {:id ~id})]))
-                on-drag-start (fn [fact]
-                                (om/transact! this `[(editor/dragging {:fact ~fact})]))
+                on-fact-drag-start (fn [fact]
+                                     (om/transact! this `[(editor/dragging-fact {:fact ~fact})]))
+                on-passage-drag-start (fn [passage]
+                                        (om/transact! this `[(editor/dragging-passage {:passage {:d/id ~(:d/id passage)}})]))
                 transact! (partial om/transact! this)]
             (dom/div #js {:className "mdl-grid"}
                      (dom/div #js {:className "mdl-cell mdl-cell--3-col"}
                               (passage-links-view (om/computed story
                                                                {:current-passage-id (-> editing :d/passage :d/id)
+                                                                :on-drag-start on-passage-drag-start
                                                                 :edit! edit!
                                                                 :new-passage new-passage
                                                                 :delete! delete!})))
@@ -388,7 +518,7 @@
                                                           :all-facts facts})))
                      (dom/div #js {:className "mdl-cell mdl-cell--3-col"}
                               (all-facts-view (om/computed {:facts facts}
-                                                           {:on-drag-start on-drag-start})))))))
+                                                           {:on-drag-start on-fact-drag-start})))))))
 
 (def view (om/factory Editor))
 
@@ -432,13 +562,21 @@
                 (-> st
                     (update-in [:story/by-id story-id :d/passages] remove-passage))))))})
 
-(defmethod mutate 'editor/dragging
+(defmethod mutate 'editor/dragging-fact
   [{:keys [state]} _ {:keys [fact]}]
   {:action
    (fn []
      (swap! state
             (fn [st]
-              (assoc-in st [:editor :editing :dragging] fact))))})
+              (assoc-in st [:editor :editing :dragging-fact] fact))))})
+
+(defmethod mutate 'editor/dragging-passage
+  [{:keys [state]} _ {:keys [passage]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (assoc-in st [:editor :editing :dragging-passage] passage))))})
 
 (defn format-fact [fact]
   (select-keys fact (om/get-query Fact)))
@@ -475,17 +613,17 @@
              (fn [choices]
                (vec (remove (comp (partial = choice-id) :d/id) choices)))))
 
-(defmethod mutate 'editor/add-assumption
+(defmethod mutate 'editor/add-precondition
   [{:keys [state]} _ {:keys [passage-id fact]}]
   {:action
    (fn []
-     (swap! state add-fact passage-id :d/assumptions fact))})
+     (swap! state add-fact passage-id :d/preconditions fact))})
 
-(defmethod mutate 'editor/remove-assumption
+(defmethod mutate 'editor/remove-precondition
   [{:keys [state]} _ {:keys [passage-id fact-id]}]
   {:action
    (fn []
-     (swap! state remove-fact passage-id :d/assumptions fact-id))})
+     (swap! state remove-fact passage-id :d/preconditions fact-id))})
 
 (defmethod mutate 'editor/add-consequence
   [{:keys [state]} _ {:keys [passage-id fact]}]
@@ -498,6 +636,46 @@
   {:action
    (fn []
      (swap! state remove-fact passage-id :d/consequences fact-id))})
+
+(defmethod mutate 'editor/update-link-probability
+  [{:keys [state]} _ {:keys [passage-id link-id probability]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (-> st
+                  (update-in [:passage/by-id passage-id :d/links]
+                             (fn [links]
+                               (vec
+                                (map
+                                 (fn [link]
+                                   (if (= (:d/id link) link-id)
+                                     (assoc link :probability probability)
+                                     link))
+                                 links))))))))})
+
+(defmethod mutate 'editor/add-link
+  [{:keys [state]} _ {:keys [passage-id link]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (-> st
+                  (update-in [:passage/by-id passage-id :d/links]
+                             conj link)))))})
+
+(defmethod mutate 'editor/remove-link
+  [{:keys [state]} _ {:keys [passage-id link-id]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (-> st
+                  (update-in [:passage/by-id passage-id :d/links]
+                             (fn [ls]
+                               (vec (remove (fn [l]
+                                              (= (:d/id l) link-id))
+                                            ls))))))))})
 
 (defmethod mutate 'editor/add-choice
   [{:keys [state]} _ {:keys [passage-id choice]}]

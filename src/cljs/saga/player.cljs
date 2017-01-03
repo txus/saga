@@ -65,10 +65,10 @@
          [:passage/by-id id])
   static om/IQuery
   (query [this]
-         [:d/id :d/choices :d/chose :d/text :d/assumptions :d/consequences])
+         [:d/id :d/choices :d/links :d/chose :d/text :d/preconditions :d/consequences])
   Object
   (render [this]
-          (let [{:keys [d/choices d/text d/id last? d/chose]} (om/props this)
+          (let [{:keys [d/choices d/links d/text d/id last? d/chose]} (om/props this)
                 {:keys [choose! last?]} (om/get-computed this)]
             (dom/div
              nil

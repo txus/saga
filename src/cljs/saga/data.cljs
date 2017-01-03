@@ -6,17 +6,21 @@
 (s/def ::id uuid?)
 
 (s/def ::passage (s/keys :req [::text
-                               ::assumptions
+                               ::preconditions
                                ::consequences
+                               ::links
                                ::choices
                                ::id]))
 
 (s/def ::fact (s/keys :req [::id ::negated? ::description]))
 (s/def ::facts (s/coll-of ::fact :kind set?))
 
+(s/def ::link (s/keys :req [::id] :opt [::probability]))
+(s/def ::links (s/coll-of ::link :kind set?))
+
 (s/def ::negated? boolean?)
 
-(s/def ::assumptions (s/coll-of ::fact :kind set?))
+(s/def ::preconditions (s/coll-of ::fact :kind set?))
 (s/def ::consequences (s/coll-of ::fact :kind set?))
 
 (s/def ::choice (s/keys :req [::id ::description ::consequences]))

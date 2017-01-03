@@ -28,6 +28,14 @@
   (assoc (mk-fact description)
          :d/negated? true))
 
+;; LINKS
+
+(defn leading-to [passage passage-id &{:keys [p]}]
+  (update passage :d/links conj
+          (merge
+           {:d/id passage-id}
+           (when p {:d/probability p}))))
+
 ;; CHOICES
 
 (defn when-chose [description & consequences]
@@ -40,12 +48,13 @@
 (defn passage [id text]
   {:d/id (mk-id id)
    :d/text text
-   :d/assumptions [] #_#{}
-   :d/consequences [] #_#{}
+   :d/links []
+   :d/preconditions []
+   :d/consequences []
    :d/choices []})
 
-(defn assumes [passage fact]
-  (update passage :d/assumptions conj fact))
+(defn requires [passage fact]
+  (update passage :d/preconditions conj fact))
 
 (defn entails [passage consequence]
   (update passage :d/consequences conj consequence))

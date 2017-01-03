@@ -42,27 +42,33 @@
    [(-> (s/passage :in-the-building
                    "It was raining outside. The street was soaking wet.")
         (s/entails (s/indeed "went out to the street"))
+        (s/leading-to :death-by-car :p 0.2)
         (s/choices
          (s/when-chose "I went out without an umbrella"
            (s/not "I have an umbrella"))
          (s/when-chose "I took an umbrella"
            (s/indeed "I have an umbrella"))))
 
+    (-> (s/passage :death-by-car
+                   "Crossing the street, a car ran me over...")
+        (s/requires (s/indeed "death by car"))
+        (s/entails (s/indeed "the end")))
+
     (-> (s/passage :crossing-the-street
                    "I crossed the street and got in the library.")
-        (s/assumes (s/indeed "went out to the street"))
+        (s/requires (s/indeed "went out to the street"))
         (s/entails (s/indeed "went into the library")))
 
     (-> (s/passage :in-the-library-without-umbrella
                    "As I was entering, the security guards turned me away. I guess they didn't want their books ruined...")
-        (s/assumes (s/indeed "went into the library"))
-        (s/assumes (s/not "I have an umbrella"))
+        (s/requires (s/indeed "went into the library"))
+        (s/requires (s/not "I have an umbrella"))
         (s/entails (s/indeed "got rejected from the library")))
 
     (-> (s/passage :in-the-library
                    "As I was entering, the librarian greeted me: 'Hello John! Are you here to return the book? You've had it for a while.'")
-        (s/assumes (s/indeed "went into the library"))
-        (s/assumes (s/indeed "I have an umbrella"))
+        (s/requires (s/indeed "went into the library"))
+        (s/requires (s/indeed "I have an umbrella"))
         (s/entails (s/indeed "got prompted to return the book"))
         (s/choices
          (s/when-chose "I approached the counter and took the book out of my bag. He seemed happy."
@@ -72,19 +78,19 @@
 
     (-> (s/passage :browsing-without-returning-the-book
                    "I spent a while browsing. As I was trying to reach onto the top shelf, my book came out of my bag. An old man looked at it with disapproval.")
-        (s/assumes (s/not "returned the book"))
-        (s/assumes (s/indeed "got prompted to return the book"))
+        (s/requires (s/not "returned the book"))
+        (s/requires (s/indeed "got prompted to return the book"))
         (s/entails (s/indeed "old man disapproved me")))
 
     (-> (s/passage :browsing-having-returned-the-book
                    "I spent a while browsing. I reached out for the second part of the series in a top shelf, found the gun inside and left.")
-        (s/assumes (s/indeed "returned the book"))
-        (s/assumes (s/indeed "got prompted to return the book"))
+        (s/requires (s/indeed "returned the book"))
+        (s/requires (s/indeed "got prompted to return the book"))
         (s/entails (s/indeed "the end")))
 
     (-> (s/passage :browsing-without-returning-the-book-2
                    "I tried to find an excuse he'd understand but the truth is I felt ashamed and left.")
-        (s/assumes (s/indeed "old man disapproved me"))
+        (s/requires (s/indeed "old man disapproved me"))
         (s/entails (s/indeed "the end")))]})
 
 (def init-data
@@ -106,9 +112,6 @@
                                  :screen screen
                                  :editor {:story [:story/by-id id]
                                           :editing {:d/passage (-> story :d/passages first)}}))
-                :player (assoc st
-                               :player {:story [:story/by-id id]}
-                               :screen screen)
                 st))))})
 
 (defmethod mutate 'app/delete-story
@@ -133,16 +136,13 @@
   Object
   (render [this]
           (let [{:keys [story/id story/title d/passages]} (om/props this)
-                {:keys [play-story! edit-story! delete-story!]} (om/get-computed this)]
+                {:keys [edit-story! delete-story!]} (om/get-computed this)]
             (dom/div #js {:className "story-card mdl-card mdl-shadow--2dp mdl-cell mdl-cell--3-col"
                           :key id}
                      (dom/div #js {:className "mdl-card__title"}
                               (dom/h2 #js {:className "mdl-card__title-text"}
                                       title))
                      (dom/div #js {:className "mdl-card__actions story-actions"}
-                              (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
-                                               :onClick #(play-story! id)}
-                                          (dom/i #js {:className "material-icons"} "play_arrow"))
                               (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
                                                :onClick #(edit-story! id)}
                                           (dom/i #js {:className "material-icons"} "edit"))
@@ -190,7 +190,6 @@
        (when-let [p (-> editor :editing :d/passage :d/id)]
          (str " - " (name p)))))
     "Stories"))
-
 
 (defn main-header-view [this]
   (dom/header #js {:className "ide-actions"}
