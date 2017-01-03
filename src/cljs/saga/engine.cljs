@@ -27,7 +27,6 @@
   (first (filter (comp (partial = choice-id) :d/id) choices)))
 
 (defn- choose [choice-id choices]
-  (log "Choosing" choice-id "among" choices)
   (if-let [choice (-> choices (find-choice choice-id))]
     choice
     (throw (ex-info "Choice is not available."
@@ -41,7 +40,6 @@
     (nth (keys m) (count (take-while #( <= % r ) w)))))
 
 (defn probabilistic-choice [links]
-  (log "Probabilistic choice:" links)
   (weighted
    (reduce
     (fn [acc {:keys [d/id d/probability]}]
@@ -89,21 +87,29 @@
     (->> possible-passages shuffle first)))
 
 (defn next-passage* [current path all-passages facts]
-  (log current)
   (if-let [links (seq (:d/links current))]
     (if-let [from-link (next-passage-from-links links all-passages)]
       from-link
       (next-passage-from-constraints current path all-passages facts))
     (next-passage-from-constraints current path all-passages facts)))
 
+(defn determine-consequences [cs]
+  (reduce
+   (fn [acc {:keys [d/fact d/probability] :or {probability 1.0}}]
+     (cond-> acc
+       (< (rand) probability)
+       (conj fact)))
+   #{}
+   cs))
+
 (defn next
   ([world] (next world nil))
   ([{:keys [d/passages d/facts d/path] :as world} choice-id?]
    (let [current (last path)
-         facts (set/union (set facts) (set (:d/consequences current)))
+         facts (set/union (set facts) (determine-consequences (:d/consequences current)))
          new-facts (if-not choice-id?
                      facts
-                     (reconcile facts (-> (choose choice-id? (:d/choices current)) :d/consequences set)))
+                     (reconcile facts (-> (choose choice-id? (:d/choices current)) :d/consequences determine-consequences)))
          next-passage (next-passage* current path passages new-facts)]
      (if (or (nil? next-passage)
              (some (comp (partial = :the-end) :d/id) facts)

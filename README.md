@@ -14,10 +14,10 @@ Playing a story (running a Saga program) starts with an empty bag of facts, and
 the story progresses from passage to passage through links, user choices and
 satisfied preconditions.
 
-As we'll see as you read on -- preconditions, consequences and choices govern
-declarative, constraint-based control-flow, whereas links are used for
-probabilistic control flow (and thus can also be used to model imperative,
-deterministic control flow).
+As we'll see as you read on -- preconditions, choices and deterministic
+consequences govern declarative, constraint-based control-flow, whereas links
+and probabilistic consequences are used for probabilistic control flow (and thus
+can also be used to model imperative, deterministic control flow too).
 
 ### Preconditions
 
@@ -39,8 +39,10 @@ is to acquire the fact `"I have a car"` at some prior point in the story.
 
 ### Consequences
 
-A consequence is a fact that will be true after a passage occurs, and thus will
-be accumulated into the player's bag of facts.
+A consequence is a fact that may be true after a passage occurs depending on a
+probability, and thus may be accumulated into the player's bag of facts.
+
+When no probability is given, it defaults to certainty:
 
 ```clojure
 (-> (s/passage :in-the-market "Wandering through the market, I found an apple.")
@@ -50,6 +52,14 @@ be accumulated into the player's bag of facts.
 This means that after the `:in-the-market` passage happens, the player will have
 a new fact in their bag, namely `"I have an apple"`. This may enable future
 passages that might otherwise be inaccesible (such as eating an apple).
+
+Consequences can have independent probabilities up to 100% each:
+
+```clojure
+(-> (s/passage :in-the-market "Wandering through the market, I found an apple.")
+    (s/entails (s/indeed "I have an apple"))
+    (s/entails (s/indeed "Someone saw me in the market" :p 0.2)))
+```
 
 ### Choices
 
@@ -69,6 +79,20 @@ entails a set of consequences.
 This means that, when this passage occurs, the player will be presented with a
 choice between taking an umbrella or sunglasses. These facts might determine the
 availability of future passages.
+
+Consequences in choice branches can also have independent probabilities, just
+like normal consequences:
+
+```clojure
+(-> (s/passage :at-the-crossroads "I came to a crossroads.")
+    (s/choices
+      (s/when-chose "I decided to go left."
+        (s/then (s/indeed "I went left"))
+        (s/then (s/indeed "A spy saw me.") :p 0.2))
+      (s/when-chose "I took an umbrella, you never know."
+        (s/then
+          (s/indeed "I went right")))))
+```
 
 ### Links
 
@@ -195,7 +219,7 @@ There are currently no automated tests. To run them anyway:
 * [x] Material design in the IDE
 * [x] Material design in the Player
 * [x] Probabilistic passage links
-* [ ] Probabilistic facts
+* [x] Probabilistic consequences
 
 ### Tooling / Debugging
 

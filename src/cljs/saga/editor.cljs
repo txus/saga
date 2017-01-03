@@ -7,6 +7,7 @@
             [om.util :as u]
             devtools.core
             [om.dom :as dom]
+            [plumbing.core :as pc]
             [clojure.string :as str]
             [clojure.set :as set]))
 
@@ -22,15 +23,16 @@
        (mapcat (fn [passage]
                  (let [{:keys [d/preconditions d/consequences d/choices]} passage
                        passage-facts (concat preconditions
-                                             consequences
-                                             (mapcat :d/consequences choices))]
+                                             (map :d/fact consequences)
+                                             (->> choices
+                                                  (mapcat :d/consequences)
+                                                  (map :d/fact)))]
                    passage-facts)))
        set))
 
 (defmethod read :search/results
   [{:keys [state ast] :as env} k {:keys [query type]}]
   (let [st @state]
-    (println (-> st :editor :story))
     (if (empty? query)
       {:value #{}}
       {:value
@@ -150,17 +152,23 @@
 
 (def all-facts-view (om/factory AllFacts))
 
-(defui Choice
-  static om/IQuery
-  (query [this]
-         (let [fact-query (om/get-query Fact)]
-           `[:d/id :d/description {:d/consequences ~fact-query}])))
-
-
 (defui Link
   static om/IQuery
   (query [this]
          [:d/id :d/probability]))
+
+(defui Consequence
+  static om/IQuery
+  (query [this]
+         (let [fact-query (om/get-query Fact)]
+           `[{:d/fact ~fact-query}
+             :d/probability])))
+
+(defui Choice
+  static om/IQuery
+  (query [this]
+         (let [consequence-query (om/get-query Consequence)]
+           `[:d/id :d/description {:d/consequences ~consequence-query}])))
 
 (defui EditingPassage
   static om/Ident
@@ -170,12 +178,13 @@
   static om/IQuery
   (query [this]
          (let [fact-query (om/get-query Fact)
+               consequence-query (om/get-query Consequence)
                link-query (om/get-query Link)
                choice-query (om/get-query Choice)]
            `[:d/id
              :d/text
              {:d/links ~link-query}
-             {:d/consequences ~fact-query}
+             {:d/consequences ~consequence-query}
              {:d/preconditions ~fact-query}
              {:d/choices ~choice-query}])))
 
@@ -306,6 +315,47 @@
 
 (def fact-auto-completer (om/factory FactAutoCompleter))
 
+
+(defui ConsequencesList
+  Object
+  (render [this]
+          (let [{:keys [title consequences dragging-fact props]} (om/props this)
+                {:keys [className add! update-probability! remove! delete-self!]} (om/get-computed this)]
+            (dom/div (clj->js
+                      (merge
+                       {:className (str (or className "") " consequences")
+                        :onDragOver (fn [e] (.preventDefault e))
+                        :onDrop (fn [_]
+                                  (when dragging-fact
+                                    (add! {:d/fact dragging-fact})))}
+                       props))
+                     (fact-auto-completer (om/computed {} {:type :fact
+                                                           :on-select (fn [x] (add! {:d/fact x}))}))
+                     (apply dom/ul #js {:className "mdl-list"}
+                            (map (fn [{:keys [d/fact d/probability] :as consequence}]
+                                   (let [{:keys [d/negated?]} fact]
+                                     (dom/li #js {:className (str "fact consequence mdl-list__item " (if negated? "negative" "positive"))}
+                                             (dom/span #js {:className "mdl-list__item-primary-content"}
+                                                       (dom/span nil (str (mk-title fact) " ("))
+                                                       (dom/input #js {:className "consequence-probability"
+                                                                       :value (str (when probability (* 100 probability)))
+                                                                       :onChange (fn [e]
+                                                                                   (let [new-probability (.. e -target -value)]
+                                                                                     (update-probability! (fact-id fact) new-probability)))})
+                                                       (dom/span nil " %)"))
+                                             (dom/span #js {:className "mdl-list__item-secondary-action"
+                                                            :onClick (fn [e]
+                                                                       (.stopPropagation e)
+                                                                       (.preventDefault e)
+                                                                       (remove! (fact-id fact))
+                                                                       false)}
+                                                       (dom/label #js {:className "mdl-button mdl-button--icon mdl-js-button mdl-js-ripple-effect"}
+                                                                  (dom/i #js {:className "material-icons"}
+                                                                         "delete"))))))
+                                 consequences))))))
+
+(def consequences-list (om/factory ConsequencesList))
+
 (defui FactsList
   Object
   (render [this]
@@ -391,7 +441,7 @@
                                                    :onDragOver (fn [e] (.preventDefault e))
                                                    :onDrop (fn [_]
                                                              (when dragging-fact
-                                                               (transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~dragging-fact})])))}
+                                                               (transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :consequence {:d/fact ~dragging-fact}})])))}
                                               (dom/div #js {:className "mdl-card__title"}
                                                        (dom/h5 #js {:className "mdl-card__title-text"})
                                                        description)
@@ -400,13 +450,24 @@
                                                                         :onClick #(when (.confirm js/window "Are you sure?")
                                                                                     (transact! `[(editor/remove-choice {:passage-id ~id :choice-id ~choice-id})]))}
                                                                    (dom/i #js {:className "material-icons"} "delete")))
-                                              (facts-list (om/computed
-                                                           {:kind :consequences
-                                                            :title ""
-                                                            :dragging-fact dragging-fact
-                                                            :facts consequences}
-                                                           {:add! #(transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :fact ~%})])
-                                                            :remove! #(transact! `[(editor/remove-consequence-from-choice {:passage-id ~id :choice-id ~choice-id :fact-id ~%})])})))))
+                                              (consequences-list
+                                               (om/computed
+                                                {:title ""
+                                                 :dragging-fact dragging-fact
+                                                 :consequences consequences}
+                                                {:update-probability! (fn [fact-id probability]
+                                                                        (let [probability (if (empty? probability)
+                                                                                            nil
+                                                                                            probability)]
+                                                                          (when probability
+                                                                            (when-let [parsed (try (js/parseFloat probability)
+                                                                                                   (catch js/Error _))]
+                                                                              (if (> parsed 100)
+                                                                                (throw (js/Error. "A probability can't be higher than 100%"))
+                                                                                (transact! `[(editor/update-consequence-probability {:passage-id ~passage-id :choice-id ~choice-id :fact-id ~fact-id :probability ~(/ parsed 100)})]))))))
+                                                 :add! #(transact! `[(editor/add-consequence-to-choice {:passage-id ~id :choice-id ~choice-id :consequence ~%})])
+                                                 :remove! #(transact! `[(editor/remove-consequence-from-choice {:passage-id ~id :choice-id ~choice-id :fact-id ~%})])})))))
+
                                  (sort-by :d/id choices)))))))
 
 (def choices-view (om/factory ChoicesView))
@@ -451,12 +512,22 @@
                                 (dom/div #js {:className "mdl-card__title"}
                                          (dom/h3 #js {:className "mdl-card__title-text"})
                                          "Consequences")
-                                (facts-list (om/computed
-                                             {:kind :consequences
-                                              :dragging-fact dragging-fact
-                                              :facts consequences}
-                                             {:add! #(transact! `[(editor/add-consequence {:passage-id ~id :fact ~%})])
-                                              :remove! #(transact! `[(editor/remove-consequence {:passage-id ~id :fact-id ~%})])})))
+                                (consequences-list
+                                 (om/computed
+                                  {:dragging-fact dragging-fact
+                                   :consequences consequences}
+                                  {:update-probability! (fn [fact-id probability]
+                                                          (let [probability (if (empty? probability)
+                                                                              nil
+                                                                              probability)]
+                                                            (when probability
+                                                              (when-let [parsed (try (js/parseFloat probability)
+                                                                                     (catch js/Error _))]
+                                                                (if (> parsed 100)
+                                                                  (throw (js/Error. "A probability can't be higher than 100%"))
+                                                                  (transact! `[(editor/update-consequence-probability {:passage-id ~id  :fact-id ~fact-id :probability ~(/ parsed 100)})]))))))
+                                   :add! #(transact! `[(editor/add-consequence {:passage-id ~id :consequence ~%})])
+                                   :remove! #(transact! `[(editor/remove-consequence {:passage-id ~id :fact-id ~%})])})))
                        (dom/div #js {:className "mdl-card mdl-cell--12-col mdl-cell"}
                                 (dom/div #js {:className "mdl-card__title"}
                                          (dom/h3 #js {:className "mdl-card__title-text"})
@@ -552,7 +623,6 @@
    (fn []
      (swap! state
             (fn [st]
-              (println (-> st :editor :story second))
               (let [st (if (= id (-> st :editor :editing :d/passage second))
                          (update-in st [:editor :editing] dissoc :d/passage)
                          st)
@@ -586,6 +656,12 @@
    (remove pred coll)
    (map update-fn (filter pred coll))))
 
+(defn update-choice [st passage-id choice-id f]
+  (update-in st [:passage/by-id passage-id :d/choices]
+             (fn [choices]
+               (into []
+                     (update-when choices #(= (:d/id %) choice-id) f)))))
+
 (defn add-fact* [new-fact-id facts]
   (-> facts
       set
@@ -601,9 +677,14 @@
         (update-in [:passage/by-id passage-id ty]
                    (partial add-fact* new-fact-id)))))
 
+(defn remove-consequence [st passage-id fact-id]
+  (-> st
+      (update-in [:passage/by-id passage-id :d/consequences]
+                 (fn [cs]
+                   (vec (remove (comp (partial = fact-id) second :d/fact) cs))))))
+
 (defn remove-fact [st passage-id ty fact-id]
   (-> st
-      (update :fact/by-id dissoc fact-id)
       (update-in [:passage/by-id passage-id ty]
                  (fn [facts]
                    (vec (remove (comp (partial = fact-id) second) facts))))))
@@ -626,16 +707,38 @@
      (swap! state remove-fact passage-id :d/preconditions fact-id))})
 
 (defmethod mutate 'editor/add-consequence
-  [{:keys [state]} _ {:keys [passage-id fact]}]
+  [{:keys [state]} _ {:keys [passage-id consequence]}]
   {:action
    (fn []
-     (swap! state add-fact passage-id :d/consequences fact))})
+     (swap! state add-fact passage-id :d/consequences consequence))})
 
 (defmethod mutate 'editor/remove-consequence
   [{:keys [state]} _ {:keys [passage-id fact-id]}]
   {:action
    (fn []
-     (swap! state remove-fact passage-id :d/consequences fact-id))})
+     (swap! state remove-consequence passage-id fact-id))})
+
+(defmethod mutate 'editor/update-consequence-probability
+  [{:keys [state]} _ {:keys [passage-id choice-id fact-id probability]}]
+  {:action
+   (fn []
+     (swap! state
+            (fn [st]
+              (let [update-consequence-probability (fn [cs]
+                                                     (mapv
+                                                      (fn [{:keys [d/fact] :as c}]
+                                                        (if (= (second fact) fact-id)
+                                                          (assoc c :d/probability probability)
+                                                          c))
+                                                      cs))]
+                (if choice-id
+                  (-> st
+                      (update-choice passage-id choice-id
+                                     (fn [choice]
+                                       (update choice :d/consequences update-consequence-probability))))
+                  (-> st
+                      (update-in [:passage/by-id passage-id :d/consequences]
+                                 update-consequence-probability)))))))})
 
 (defmethod mutate 'editor/update-link-probability
   [{:keys [state]} _ {:keys [passage-id link-id probability]}]
@@ -646,13 +749,12 @@
               (-> st
                   (update-in [:passage/by-id passage-id :d/links]
                              (fn [links]
-                               (vec
-                                (map
-                                 (fn [link]
-                                   (if (= (:d/id link) link-id)
-                                     (assoc link :probability probability)
-                                     link))
-                                 links))))))))})
+                               (mapv
+                                (fn [link]
+                                  (if (= (:d/id link) link-id)
+                                    (assoc link :probability probability)
+                                    link))
+                                links)))))))})
 
 (defmethod mutate 'editor/add-link
   [{:keys [state]} _ {:keys [passage-id link]}]
@@ -689,24 +791,27 @@
    (fn []
      (swap! state remove-choice passage-id choice-id))})
 
-(defn update-choice [st passage-id choice-id f]
-  (update-in st [:passage/by-id passage-id :d/choices]
-             (fn [choices]
-               (into []
-                     (update-when choices #(= (:d/id %) choice-id) f)))))
-
 (defmethod mutate 'editor/add-consequence-to-choice
-  [{:keys [state]} _ {:keys [passage-id choice-id fact]}]
+  [{:keys [state]} _ {:keys [passage-id choice-id consequence]}]
   {:action
    (fn []
      (swap! state
             (fn [st]
               (-> st
-                  (assoc-in [:fact/by-id (fact-id fact)] (format-fact fact))
+                  (assoc-in [:fact/by-id (fact-id (:d/fact consequence))]
+                            (format-fact (:d/fact consequence)))
                   (update-choice passage-id choice-id
                                  (fn [choice]
                                    (update choice :d/consequences
-                                           (partial add-fact* (fact-id fact)))))))))})
+                                           (fn [cs]
+                                             (let [normalized-consequence (update consequence :d/fact (fn [f] [:fact/by-id (fact-id f)]))
+                                                   cs (conj cs normalized-consequence)
+                                                   by-fact (pc/map-vals last (group-by :d/fact cs))
+                                                   new-fact-id (-> consequence :d/fact fact-id)]
+                                               (-> by-fact
+                                                   (dissoc [:fact/by-id (update new-fact-id 1 not)])
+                                                   vals
+                                                   vec))))))))))})
 
 (defmethod mutate 'editor/remove-consequence-from-choice
   [{:keys [state] :as env} _ {:keys [passage-id choice-id fact-id]}]
@@ -715,7 +820,7 @@
      (swap! state update-choice passage-id choice-id
             (fn [choice]
               (update choice :d/consequences (fn [conseqs]
-                                               (into [] (remove (comp (partial = fact-id) second) conseqs)))))))})
+                                               (into [] (remove (comp (partial = fact-id) second :d/fact) conseqs)))))))})
 
 (defmethod mutate 'editor/update-passage
   [{:keys [state] :as env} _ {:keys [passage-id props]}]

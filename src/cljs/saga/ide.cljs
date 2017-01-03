@@ -42,16 +42,19 @@
    [(-> (s/passage :in-the-building
                    "It was raining outside. The street was soaking wet.")
         (s/entails (s/indeed "went out to the street"))
+        (s/entails (s/indeed "I am soaked") :p 0.2)
         (s/leading-to :death-by-car :p 0.2)
         (s/choices
          (s/when-chose "I went out without an umbrella"
-           (s/not "I have an umbrella"))
+           (s/then
+            (s/indeed "I am soaked")))
          (s/when-chose "I took an umbrella"
-           (s/indeed "I have an umbrella"))))
+           (s/then
+            (s/indeed "I have an umbrella")))))
 
     (-> (s/passage :death-by-car
                    "Crossing the street, a car ran me over...")
-        (s/requires (s/indeed "death by car"))
+        (s/requires (s/indeed "impossible to reach except through a link"))
         (s/entails (s/indeed "the end")))
 
     (-> (s/passage :crossing-the-street
@@ -59,11 +62,11 @@
         (s/requires (s/indeed "went out to the street"))
         (s/entails (s/indeed "went into the library")))
 
-    (-> (s/passage :in-the-library-without-umbrella
+    (-> (s/passage :in-the-library-soaked
                    "As I was entering, the security guards turned me away. I guess they didn't want their books ruined...")
         (s/requires (s/indeed "went into the library"))
-        (s/requires (s/not "I have an umbrella"))
-        (s/entails (s/indeed "got rejected from the library")))
+        (s/requires (s/indeed "I am soaked"))
+        (s/entails (s/indeed "the end")))
 
     (-> (s/passage :in-the-library
                    "As I was entering, the librarian greeted me: 'Hello John! Are you here to return the book? You've had it for a while.'")
@@ -72,9 +75,11 @@
         (s/entails (s/indeed "got prompted to return the book"))
         (s/choices
          (s/when-chose "I approached the counter and took the book out of my bag. He seemed happy."
-           (s/indeed "returned the book"))
+           (s/then
+            (s/indeed "returned the book")))
          (s/when-chose "I made up an excuse to keep the book a bit longer and told him I just wanted to browse."
-           (s/not "returned the book"))))
+           (s/then
+            (s/not "returned the book")))))
 
     (-> (s/passage :browsing-without-returning-the-book
                    "I spent a while browsing. As I was trying to reach onto the top shelf, my book came out of my bag. An old man looked at it with disapproval.")
@@ -278,6 +283,9 @@
 
 (def auto-save (atom nil))
 
+(defn ^:export show-reconciler []
+  (println @reconciler))
+
 (defn init []
   (swap! auto-save
          (fn [interval?]
@@ -290,3 +298,4 @@
   (om/add-root! reconciler
                 App
                 (gdom/getElement "container")))
+

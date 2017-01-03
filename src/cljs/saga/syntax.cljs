@@ -43,6 +43,11 @@
    :d/description (display description)
    :d/consequences (into [] consequences)})
 
+(defn then [fact & {:keys [p]}]
+  (merge
+   {:d/fact fact}
+   (when p {:d/probability p})))
+
 ;; PASSAGES
 
 (defn passage [id text]
@@ -56,8 +61,9 @@
 (defn requires [passage fact]
   (update passage :d/preconditions conj fact))
 
-(defn entails [passage consequence]
-  (update passage :d/consequences conj consequence))
+(defn entails [passage fact &{:keys [p]}]
+  (update passage :d/consequences conj
+          (then fact :p p)))
 
 (defn choices [passage & choices]
   (update passage :d/choices #(into % choices)))
