@@ -60,10 +60,10 @@ entails a set of consequences.
 (-> (s/passage :at-home "I was getting read to get out of the house, and...")
     (s/choices
       (s/when-chose "Forget the umbrella, this is Barcelona. Sunglasses time!"
-        (s/not "I have an umbrella)
+        (s/not "I have an umbrella")
         (s/indeed "I have sunglasses on"))
       (s/when-chose "I took an umbrella, you never know."
-        (s/indeed "I have an umbrella))))
+        (s/indeed "I have an umbrella"))))
 ```
 
 This means that, when this passage occurs, the player will be presented with a
