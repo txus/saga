@@ -43,7 +43,7 @@
                    "It was raining outside. The street was soaking wet.")
         (s/entails (s/indeed "went out to the street"))
         (s/entails (s/indeed "I am soaked") :p 0.2)
-        (s/leading-to :death-by-car :p 0.2)
+        (s/leads-to :death-by-car :p 0.2)
         (s/choices
          (s/when-chose "I went out without an umbrella"
            (s/then

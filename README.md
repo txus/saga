@@ -58,7 +58,7 @@ Consequences can have independent probabilities up to 100% each:
 ```clojure
 (-> (s/passage :in-the-market "Wandering through the market, I found an apple.")
     (s/entails (s/indeed "I have an apple"))
-    (s/entails (s/indeed "Someone saw me in the market" :p 0.2)))
+    (s/entails (s/indeed "Someone saw me in the market") :p 0.2))
 ```
 
 ### Choices
@@ -70,10 +70,10 @@ entails a set of consequences.
 (-> (s/passage :at-home "I was getting read to get out of the house, and...")
     (s/choices
       (s/when-chose "Forget the umbrella, this is Barcelona. Sunglasses time!"
-        (s/not "I have an umbrella")
-        (s/indeed "I have sunglasses on"))
+        (s/then (s/not "I have an umbrella"))
+        (s/then (s/indeed "I have sunglasses on")))
       (s/when-chose "I took an umbrella, you never know."
-        (s/indeed "I have an umbrella"))))
+        (s/then (s/indeed "I have an umbrella")))))
 ```
 
 This means that, when this passage occurs, the player will be presented with a
@@ -90,8 +90,7 @@ like normal consequences:
         (s/then (s/indeed "I went left"))
         (s/then (s/indeed "A spy saw me.") :p 0.2))
       (s/when-chose "I took an umbrella, you never know."
-        (s/then
-          (s/indeed "I went right")))))
+        (s/then (s/indeed "I went right")))))
 ```
 
 ### Links
@@ -100,7 +99,7 @@ A link is a probability to jump from one passage to another when the first occur
 
 ```clojure
 (-> (s/passage :at-the-store "That store was so full of items, that I was getting hungry.")
-    (s/leading-to :at-the-mall-restaurant))
+    (s/leads-to :at-the-mall-restaurant))
 ```
 
 After the `:at-the-store` passage runs, it is guaranteed that
@@ -113,8 +112,8 @@ each link to occur is 1 divided between the number of links:
 
 ```clojure
 (-> (s/passage :at-the-store "That store was so full of items, that I was getting hungry.")
-    (s/leading-to :at-the-mall-restaurant)
-    (s/leading-to :outside)))
+    (s/leads-to :at-the-mall-restaurant)
+    (s/leads-to :outside)))
 ```
 
 In this case above, 50% of the time we'll end up at the mall restaurant, and the
@@ -124,8 +123,8 @@ One can weight links on purpose, as long as the defined probabilities won't go o
 
 ```clojure
 (-> (s/passage :at-the-store "That store was so full of items, that I was getting hungry.")
-    (s/leading-to :at-the-mall-restaurant :p 0.8) ;; 80% of the time we'll go here
-    (s/leading-to :outside)))                     ;; ... and 20% of the time here
+    (s/leads-to :at-the-mall-restaurant :p 0.8) ;; 80% of the time we'll go here
+    (s/leads-to :outside)))                     ;; ... and 20% of the time here
 ```
 
 If probabilities go under 1, the remaining probability will be assigned to no
@@ -133,8 +132,8 @@ link at all:
 
 ```clojure
 (-> (s/passage :at-the-store "That store was so full of items, that I was getting hungry.")
-    (s/leading-to :at-the-mall-restaurant :p 0.2) ;; 20% of the time we'll go to the mall restaurant
-    (s/leading-to :outside :p 0.2)))              ;; another 20% of the time we'll go outside
+    (s/leads-to :at-the-mall-restaurant :p 0.2) ;; 20% of the time we'll go to the mall restaurant
+    (s/leads-to :outside :p 0.2)))              ;; another 20% of the time we'll go outside
                                                   ;; and the remaining 60% of the time no link will occur.
 ```
 
@@ -143,10 +142,10 @@ implicitly divide the remaining probabilities among the rest of the links:
 
 ```clojure
 (-> (s/passage :at-the-store "That store was so full of items, that I was getting hungry.")
-    (s/leading-to :at-the-mall-restaurant :p 0.2)
-    (s/leading-to :outside :p 0.2)
-    (s/leading-to :the-basement)
-    (s/leading-to :the-directors-office)))))
+    (s/leads-to :at-the-mall-restaurant :p 0.2)
+    (s/leads-to :outside :p 0.2)
+    (s/leads-to :the-basement)
+    (s/leads-to :the-directors-office)))))
 ```
 
 In the example above the probabilities will be:

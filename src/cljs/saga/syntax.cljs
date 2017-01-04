@@ -30,7 +30,7 @@
 
 ;; LINKS
 
-(defn leading-to [passage passage-id &{:keys [p]}]
+(defn leads-to [passage passage-id &{:keys [p]}]
   (update passage :d/links conj
           (merge
            {:d/id passage-id}
