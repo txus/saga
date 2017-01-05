@@ -34,6 +34,7 @@
       {:value (get-in st (k st))}
       {:value (om/db->tree query (k st) st)})))
 
+(declare save-state!)
 
 (defmulti mutate om/dispatch)
 
@@ -88,9 +89,9 @@
   Object
   (render [this]
           (let [{:keys [d/path]} (om/props this)
+                {:keys [transact!]} (om/get-computed this)
                 current-passage (last path)
-                choose! #(om/transact! this
-                                       `[(world/make-choice {:choice ~%})])]
+                choose! #(transact! `[(world/make-choice {:choice ~%})])]
             (dom/div
              nil
              (concat
@@ -112,8 +113,13 @@
              {:d/passages ~subquery}]))
 
   Object
+  (componentWillMount [this]
+                      (om/update-state! this assoc :auto-save (js/setInterval #(save-state!) 5000)))
+  (componentWillUnmount [this]
+                        (js/clearInterval (-> this om/get-state :auto-save)))
   (render [this]
           (let [{:keys [story/title d/path d/passages] :as props} (om/props this)
+                transact! (partial om/transact! this)
                 story? (seq passages)]
             (dom/div #js {:className "mdl-layout mdl-js-layout player mdl-layout--fixed-header"}
                      (dom/header #js {:className "mdl-layout__header mdl-layout__header--transparent"}
@@ -129,7 +135,7 @@
                                                    (upload/view (om/computed {:title "Load story"} {:upload-fn (partial upload/upload-file this)})))))
                      (dom/main #js {:className "mdl-layout__content"}
                                (when story?
-                                 (playing-story-view props)))))))
+                                 (playing-story-view (om/computed props {:transact! transact!}))))))))
 
 (defmethod mutate 'world/restart
   [{:keys [state] :as env} _ {:keys [story]}]
@@ -157,22 +163,22 @@
                          :d/passages (mapv (fn [{:keys [d/id]}] [:passage/by-id id]) passages)
                          :passage/by-id (zipmap (map :d/id passages) passages)}))))})
 
-(defmethod mutate 'app/save-state
-  [{:keys [state] :as env} _ _]
-  {:action (fn []
-             (let [st @state
-                   denormalized (om/db->tree (om/get-query Player) st st)]
-               (persistence/save-state "player" denormalized)))})
+
+(def app-state (atom
+                (om/tree->db Player
+                             (or (persistence/get-state "player") init-data)
+                             true)))
+
+(defn save-state! []
+  (let [st @app-state
+        denormalized (om/db->tree (om/get-query Player) st st)]
+    (persistence/save-state "player" denormalized)))
 
 (def reconciler
-  (om/reconciler {:state (or (persistence/get-state "player") init-data)
-                  :normalize true
+  (om/reconciler {:state app-state
                   :parser (om/parser {:read read :mutate mutate})}))
 
 (defn init []
-  (js/setInterval
-   #(om/transact! reconciler `[(app/save-state)])
-   5000)
   (om/add-root! reconciler
                 Player
                 (gdom/getElement "container")))

@@ -149,3 +149,88 @@ a.delete {
     }
 
 }
+
+.with-choice {
+    display: block;
+    .choice {
+        display: block;
+        font-size: 13px;
+        opacity: 0.8;
+    }
+}
+
+main {
+    padding: 10px;
+    p, .historical-choice {
+        font-size: 18px;
+    }
+}
+
+.choices {
+    list-style: none;
+    display: block;
+    min-height: 30px;
+    .choice {
+        cursor: pointer;
+        a {
+            color: rgb(10%, 10%, 10%);
+            font-size: 18px;
+        }
+        margin-bottom: 20px;
+
+        opacity: 0.6;
+
+        transition: opacity 0.5s;
+
+        &:hover {
+            opacity: 1;
+        }
+    }
+}
+
+
+.checkpoints {
+    .checkpoint {
+        cursor: pointer;
+        padding: 5px;
+        display: inline-block;
+        margin-left: 15px;
+
+        &:hover {
+            opacity: 1.0
+        }
+        color: #FFF;
+        &.past {
+            opacity: 0.8;
+        }
+        &.current {
+            opacity: 1;
+        }
+        &.future {
+            opacity: 0.6;
+        }
+    }
+}
+
+
+.facts {
+    position: relative;
+}
+
+.why-link {
+    color: #00A;
+    opacity: 0.5;
+    &:hover {
+        opacity: 1.0
+    }
+    transition: opacity 0.5s;
+}
+
+.why-explanation {
+    position: absolute;
+    left: 0px;
+    bottom: -50px;
+    padding: 20px;
+    border: 1px solid blue;
+    background: #FFF;
+}

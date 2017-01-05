@@ -5,10 +5,11 @@
             [cljs.reader :as r]
             [saga.upload :as upload]
             [saga.syntax :as s]
-            [saga.data :as d]
+            [saga.debug :as debugger]
             [saga.persistence :as persistence]
             [saga.parser :as p :refer [read mutate]]
             [saga.editor :as editor]
+            [plumbing.core :refer [map-vals]]
             [om.util :as u]
             devtools.core
             [secretary.core :as secretary :refer-macros [defroute]]
@@ -23,7 +24,7 @@
 
 (enable-console-print!)
 
-(declare reconciler)
+(declare reconciler app-state App save-state!)
 
 (defn get-story [story-id]
   (let [raw-data @reconciler
@@ -102,7 +103,7 @@
   {:screen :main
    :stories [{:story/id "example-story" :story/title "Example story" :d/passages (:d/passages example-story)}]
    :editor nil
-   :player nil})
+   :debugger nil})
 
 (defmethod mutate 'routes/navigate
   [{:keys [state]} _ {:keys [screen id]}]
@@ -111,12 +112,33 @@
      (swap! state
             (fn [st]
               (condp = screen
-                :main (assoc st :screen screen)
+                :main (-> st
+                          (update :passage/by-id (fn [pbid]
+                                                   (map-vals
+                                                    (fn [v]
+                                                      (dissoc v :d/chose))
+                                                    pbid)))
+                          (assoc :screen screen))
                 :editor (let [story (get-in st [:story/by-id id])]
                           (assoc st
                                  :screen screen
                                  :editor {:story [:story/by-id id]
                                           :editing {:d/passage (-> story :d/passages first)}}))
+                :debugger (let [story (get-in st [:story/by-id id])
+                                next-state
+                                (-> st
+                                    (update :passage/by-id (fn [pbid]
+                                                             (map-vals
+                                                              (fn [v]
+                                                                (dissoc v :d/chose))
+                                                              pbid)))
+                                    (assoc :screen screen
+                                           :debugger {:story [:story/by-id id]
+                                                      :d/facts #{}
+                                                      :d/path [(-> story :d/passages first)]
+
+                                                      :d/passages (:d/passages story)}))]
+                            next-state)
                 st))))})
 
 (defmethod mutate 'app/delete-story
@@ -141,13 +163,16 @@
   Object
   (render [this]
           (let [{:keys [story/id story/title d/passages]} (om/props this)
-                {:keys [edit-story! delete-story!]} (om/get-computed this)]
+                {:keys [play-story! edit-story! delete-story!]} (om/get-computed this)]
             (dom/div #js {:className "story-card mdl-card mdl-shadow--2dp mdl-cell mdl-cell--3-col"
                           :key id}
                      (dom/div #js {:className "mdl-card__title"}
                               (dom/h2 #js {:className "mdl-card__title-text"}
                                       title))
                      (dom/div #js {:className "mdl-card__actions story-actions"}
+                              (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
+                                               :onClick #(play-story! id)}
+                                          (dom/i #js {:className "material-icons"} "play_arrow"))
                               (dom/button #js {:className "story-action mdl-button mdl-js-button mdl-button--fab"
                                                :onClick #(edit-story! id)}
                                           (dom/i #js {:className "material-icons"} "edit"))
@@ -176,24 +201,86 @@
 
 (def story-list-view (om/factory StoryList))
 
+(defn fetch-history! []
+  (.-arr (-> reconciler :config :history)))
+
+(defn time-travel [this]
+  (let [{:keys [history current]} (om/get-state this)
+        _ (println "Re-rendering time travel. Current is" current)
+        latest (first history)
+        current (or current latest)
+        [before now after] (->> (reverse history)
+                                (partition-by (partial = current))
+                                (map set))
+        [before now after] (cond
+                             (nil? now)
+                             [#{} before #{}]
+                             :else
+                             [before now (or after #{})])]
+    (apply dom/ul #js {:className "checkpoints"}
+           (map
+            (fn [checkpoint]
+              (let [past? (before checkpoint)
+                    current? (now checkpoint)
+                    future? (after checkpoint)
+                    style (cond
+                            past? "past"
+                            current? "current"
+                            future? "future")]
+                (dom/li #js {:className (str "checkpoint " style)
+                             :onClick (fn [_]
+                                        (om/update-state! this assoc :current checkpoint)
+                                        (reset! app-state (om/from-history reconciler checkpoint)))}
+                        (apply str (take 3 (str checkpoint))))))
+            (reverse (take 10 history))))))
+
 (defn navigation-for [this screen]
-  (when (= screen :editor)
-    (dom/nav #js {:className "mdl-navigation"}
-             (dom/a #js {:className "mdl-navigation__link"
-                         :href ""
-                         :onClick (fn [e]
-                                    (.preventDefault e)
-                                    (om/transact! this `[(routes/navigate {:screen :main})])
-                                    false)}
-                    "Back"))))
+  (let [props (om/props this)]
+    (condp = screen
+      :editor
+      (dom/nav #js {:className "mdl-navigation"}
+               (time-travel this)
+               (dom/a #js {:className "mdl-navigation__link"
+                           :href ""
+                           :onClick (fn [e]
+                                      (.preventDefault e)
+                                      (om/transact! this `[(routes/navigate {:screen :main})])
+                                      false)}
+                      "Back"))
+      :debugger
+      (dom/nav #js {:className "mdl-navigation"}
+               (time-travel this)
+               (dom/a #js {:className "mdl-navigation__link"
+                           :href ""
+                           :onClick (fn [e]
+                                      (.preventDefault e)
+                                      (let [debugger (:debugger props)
+                                            id (-> debugger :story :story/id)]
+                                        (om/transact! this `[(routes/navigate {:screen :debugger :id ~id})]))
+                                      false)}
+                      "Restart")
+               (dom/a #js {:className "mdl-navigation__link"
+                           :href ""
+                           :onClick (fn [e]
+                                      (.preventDefault e)
+                                      (om/transact! this `[(routes/navigate {:screen :main})])
+                                      false)}
+                      "Back"))
+      (dom/nav #js {:className "mdl-navigation"}
+               (time-travel this)))))
 
 (defn title-for [this screen]
-  (if (= screen :editor)
+  (condp = screen
+    :editor
     (let [{:keys [editor]} (om/props this)]
       (str
        (-> editor :story :story/title)
        (when-let [p (-> editor :editing :d/passage :d/id)]
          (str " - " (name p)))))
+    :debugger
+    (let [{:keys [debugger]} (om/props this)]
+      (str "Debugging " (-> debugger :story :story/title)))
+    :main
     "Stories"))
 
 (defn main-header-view [this]
@@ -209,14 +296,20 @@
   static om/IQuery
   (query [this]
          (let [story-query (om/get-query Story)
-               editor-subquery (om/get-query editor/Editor)]
+               editor-subquery (om/get-query editor/Editor)
+               debugger-subquery (om/get-query debugger/Debugger)]
            `[:screen
              {:stories ~story-query}
-             {:editor ~editor-subquery}]))
+             {:editor ~editor-subquery}
+             {:debugger ~debugger-subquery}]))
 
   Object
+  (componentWillMount [this]
+                      (om/update-state! this assoc :auto-save (js/setInterval #(save-state!) 5000)))
+  (componentWillUnmount [this]
+                        (js/clearInterval (-> this om/get-state :auto-save)))
   (render [this]
-          (let [{:keys [screen stories editor player]} (om/props this)]
+          (let [{:keys [screen stories editor debugger]} (om/props this)]
             (dom/div #js {:className "mdl-layout mdl-js-layout mdl-layout--fixed-header"}
                      (dom/header #js {:className "mdl-layout__header"}
                                  (dom/div #js {:className "mdl-layout__header-row"}
@@ -230,25 +323,35 @@
                                           (dom/div nil
                                                    (main-header-view this)
                                                    (story-list-view (om/computed {:stories stories}
-                                                                                 {:play-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :player :id ~id})]))
+                                                                                 {:play-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :debugger :id ~id})]))
                                                                                   :download-story! (fn [id] (om/transact! this `[(routes/download {:id ~id})]))
                                                                                   :edit-story! (fn [id] (om/transact! this `[(routes/navigate {:screen :editor :id ~id})]))
                                                                                   :delete-story! (fn [id] (om/transact! this `[(app/delete-story {:id ~id})]))})))
                                           :editor
                                           (editor/view (om/computed editor {:parent this}))
+                                          :debugger
+                                          (debugger/view (om/computed debugger {:parent this}))
                                           (dom/div nil "Oops, you're lost!"))))))))
 
+(def app-state (atom
+                (om/tree->db App
+                             (or (persistence/get-state "ide") init-data)
+                             true)))
+
 (def reconciler
-  (om/reconciler {:state (or (persistence/get-state "ide") init-data)
-                  :normalize true
+  (om/reconciler {:state app-state
                   :parser (om/parser {:read read :mutate mutate})}))
 
-(defmethod mutate 'app/save-state
-  [{:keys [state] :as env} _ _]
-  {:action (fn []
-             (let [st @state
-                   denormalized (om/db->tree (om/get-query App) st st)]
-               (persistence/save-state "ide" denormalized)))})
+(add-watch app-state :update (fn [k r o n]
+                               (when-let [app (om/class->any reconciler App)]
+                                 (let [history (reverse (fetch-history!))]
+                                   (om/update-state! app assoc :current (first history))
+                                   (om/update-state! app assoc :history (reverse (fetch-history!)))))))
+
+(defn save-state! []
+  (let [st @app-state
+        denormalized (om/db->tree (om/get-query App) st st)]
+    (persistence/save-state "ide" denormalized)))
 
 (defmethod mutate 'story/upload
   [{:keys [state] :as env} _ {:keys [story]}]
@@ -276,25 +379,15 @@
   (om/transact! reconciler `[(routes/navigate {:screen :editor :id ~id})]))
 
 (defroute "/play/:id" [id]
-  (om/transact! reconciler `[(routes/navigate {:screen :player :id ~id})]))
+  (om/transact! reconciler `[(routes/navigate {:screen :debugger :id ~id})]))
 
 (defroute "/download/:id" [id]
   (om/transact! reconciler `[(routes/download {:id ~id})]))
-
-(def auto-save (atom nil))
 
 (defn ^:export show-reconciler []
   (println @reconciler))
 
 (defn init []
-  (swap! auto-save
-         (fn [interval?]
-           (when interval?
-             (println "there is an interval")
-             (.clearInterval js/window interval?))
-           (.setInterval js/window
-            #(om/transact! reconciler `[(app/save-state)])
-            5000)))
   (om/add-root! reconciler
                 App
                 (gdom/getElement "container")))

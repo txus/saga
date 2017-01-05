@@ -162,7 +162,7 @@ And the remaining 60% will be divided equally among the other two links:
 
 This repo contains two separate projects that share some common code:
 
-* IDE: An IDE to build stories. ![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE")
+* IDE: An IDE to build stories. ![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE") ![Saga Debugger](/screenshots/debugger.png?raw=true "Saga Debugger")
 * Player: An app to play stories. ![Saga Player](/screenshots/player.png?raw=true "Saga Player")
 
 The interpreter used by the player lives in the `saga.engine` namespace.
@@ -219,9 +219,11 @@ There are currently no automated tests. To run them anyway:
 * [x] Material design in the Player
 * [x] Probabilistic passage links
 * [x] Probabilistic consequences
+* [x] Basic time-travel across all IDE
 
 ### Tooling / Debugging
 
+* [x] Basic debugging a story, recording choices and asking facts where they came from
 * [ ] Debugging a passage by running it with a canned bag of facts
 * [ ] Debugging-enabled player within the IDE (manipulating facts, etc)
 * [ ] Debugging-enabled player within the IDE (manipulating facts, etc)
