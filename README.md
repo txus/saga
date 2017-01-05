@@ -162,7 +162,7 @@ And the remaining 60% will be divided equally among the other two links:
 
 This repo contains two separate projects that share some common code:
 
-* IDE: An IDE to build stories. ![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE") ![Saga Debugger](/screenshots/debugger.png?raw=true "Saga Debugger")
+* IDE: An IDE to build stories. ![Saga IDE](/screenshots/ide.png?raw=true "Saga IDE") ![Saga Debugger](/screenshots/debugger.gif?raw=true "Saga Debugger")
 * Player: An app to play stories. ![Saga Player](/screenshots/player.png?raw=true "Saga Player")
 
 The interpreter used by the player lives in the `saga.engine` namespace.
