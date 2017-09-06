@@ -1,7 +1,7 @@
 (ns saga.engine
   (:require [clojure.set :as set]
-            [clojure.spec.impl.gen :as gen]
-            [clojure.spec :as s]
+            [clojure.spec.gen.alpha :as gen]
+            [clojure.spec.alpha :as s]
             [plumbing.core :refer [map-vals]]
             [saga.data :as d])
   (:refer-clojure :exclude [next]))

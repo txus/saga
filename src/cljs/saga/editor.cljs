@@ -5,13 +5,10 @@
             [saga.parser :as p :refer [read mutate]]
             [saga.syntax :as s]
             [om.util :as u]
-            devtools.core
             [om.dom :as dom]
             [plumbing.core :as pc]
             [clojure.string :as str]
             [clojure.set :as set]))
-
-(devtools.core/install! [:custom-formatters :sanity-hints])
 
 (enable-console-print!)
 

@@ -11,13 +11,10 @@
             [saga.editor :as editor]
             [plumbing.core :refer [map-vals]]
             [om.util :as u]
-            devtools.core
             [secretary.core :as secretary :refer-macros [defroute]]
             [om.dom :as dom]
             [clojure.string :as str]
             [clojure.set :as set]))
-
-(devtools.core/install! [:custom-formatters :sanity-hints])
 
 (defn log [& xs]
   (js/console.log (apply str (interpose " - " (map pr-str xs)))))

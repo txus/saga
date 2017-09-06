@@ -9,11 +9,8 @@
             [saga.syntax :as s]
             [om.util :as u]
             [plumbing.core :refer [map-vals]]
-            devtools.core
             [om.dom :as dom]
             [clojure.string :as str]))
-
-(devtools.core/install! [:custom-formatters :sanity-hints])
 
 (enable-console-print!)
 
