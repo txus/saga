@@ -1,21 +1,21 @@
 (set-env!
  :source-paths    #{"sass" "src/cljs"}
- :dependencies '[[adzerk/boot-cljs          "2.1.3"  :scope "test"]
-                 [adzerk/boot-cljs-repl     "0.3.3"      :scope "test"]
-                 [adzerk/boot-reload        "0.5.2"     :scope "test"]
+ :dependencies '[[adzerk/boot-cljs          "2.1.5"  :scope "test"]
+                 [adzerk/boot-cljs-repl     "0.4.0"      :scope "test"]
+                 [adzerk/boot-reload        "0.6.0"     :scope "test"]
                  [pandeiro/boot-http        "0.8.3"      :scope "test"]
-                 [com.cemerick/piggieback   "0.2.2"      :scope "test"]
+                 [cider/piggieback   "0.4.1"      :scope "test"]
                  [com.cemerick/url "0.1.1"]
-                 [org.clojure/tools.nrepl   "0.2.12"     :scope "test"]
+                 [nrepl "0.4.5" :scope "test"]
                  [org.clojure/test.check "0.9.0" :exclude [org.clojure/clojure] :scope "test"]
                  [weasel                    "0.7.0"      :scope "test"]
-                 [org.clojure/clojurescript "1.9.908"]
+                 [org.clojure/clojurescript "1.10.520"]
                  [binaryage/dirac "RELEASE" :scope "test"]
                  [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
-                 [org.omcljs/om "1.0.0-beta1"]
+                 [org.omcljs/om "1.0.0-beta4"]
                  [deraen/boot-sass  "0.3.1" :scope "test"]
-                 [prismatic/plumbing "0.5.4"]
-                 [funcool/cuerdas "2.0.3"]
+                 [prismatic/plumbing "0.5.5"]
+                 [funcool/cuerdas "2.2.0"]
                  [secretary "1.2.3"]
 
                  [binaryage/dirac         "1.2.15" :scope "test"]
@@ -51,7 +51,7 @@
 
 (deftask production []
   (task-options!
-   cljs {:optimizations :advanced
+   cljs {:optimizations :simple
          :compiler-options {:parallel-build true
                             :compiler-stats true
                             :pretty-print false}}
@@ -94,7 +94,7 @@
                     #"css\/fonts\.css"
                     #"css\/material\.css"
                     #"js\/material\.js"
-                    (re-pattern (str build-target "\\.html"))
+                    #"index.html"
                     (re-pattern (str "css/" build-target "\\.css"))
                     (re-pattern (str "js/" build-target "\\.js"))})
    (target :dir #{(str "target-" build-target)})))

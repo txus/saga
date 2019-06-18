@@ -1,0 +1,4 @@
+[build]
+  base = "../../"
+  command = "boot package -t ide"
+  publish = "../../target-ide"

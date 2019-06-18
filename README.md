@@ -177,12 +177,15 @@ You'll need [Boot](http://boot-clj.com) (`brew install boot-clj`).
 To build the IDE:
 
     boot package -t ide
-    open target-ide/ide.html
+    open target-ide/index.html
     
 To build the player:
 
     boot package -t player
-    open target-player/player.html
+    open target-player/index.html
+    
+To deploy each part to Netlify, go to `deploys/ide` or `deploys/player`
+respectively and run `netlify deploy`.
     
 ## Developing
 
